@@ -2,6 +2,7 @@
 #include "INP_Main.h"
 #include "INP_Keyboard.h"
 
+C_4JInput InputManager;
 CKeyboard InternalKeyboard;
 
 void C_4JInput::Initialise(int iInputStateC, unsigned char ucMapC, unsigned char ucActionC, unsigned char ucMenuActionC)
