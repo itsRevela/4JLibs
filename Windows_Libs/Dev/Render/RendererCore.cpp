@@ -46,10 +46,10 @@ D3D11_PRIMITIVE_TOPOLOGY Renderer::g_topologies[C4JRender::PRIMITIVE_TYPE_COUNT]
 };
 
 Renderer::Context::Context(ID3D11Device *device, ID3D11DeviceContext *deviceContext)
-    : m_pDeviceContext(deviceContext), userAnnotation(nullptr), contextStateFlags(0), matrixModeType(0), boundTextureIndex(0), faceCullEnabled(1),
+    : m_pDeviceContext(deviceContext), userAnnotation(nullptr), annotateDepth(0), stackType(0), textureIdx(0), faceCullEnabled(1),
       depthTestEnabled(1), alphaTestEnabled(0), alphaReference(1.0f), depthWriteEnabled(1), fogEnabled(0), fogNearDistance(0.0f),
       fogFarDistance(0.0f), fogDensity(0.0f), fogColourRed(0.0f), fogColourBlue(0.0f), fogColourGreen(0.0f), fogMode(0), lightingEnabled(0),
-      lightingDirty(0), forcedLOD(0xFFFFFFFFu), cbMatrix0(nullptr), cbMatrix1(nullptr), cbMatrix2(nullptr), cbMatrix3(nullptr),
+      lightingDirty(0), forcedLOD(0xFFFFFFFFu), m_modelViewMatrix(nullptr), cbMatrix1(nullptr), cbMatrix2(nullptr), cbMatrix3(nullptr),
       cbVertexTexcoord(nullptr), cbFogParams(nullptr), cbLighting(nullptr), cbTexGen(nullptr), cbAux0(nullptr), cbAux1(nullptr), cbColour(nullptr),
       cbFogColour(nullptr), cbAux2(nullptr), cbAlphaTest(nullptr), cbAux3(nullptr), cbAux4(nullptr), dynamicVertexBase(0), dynamicVertexOffset(0),
       dynamicVertexBuffer(nullptr), commandBuffer(nullptr), recordingBufferIndex(0), recordingVertexType(0), recordingPrimitiveType(0),
@@ -58,7 +58,7 @@ Renderer::Context::Context(ID3D11Device *device, ID3D11DeviceContext *deviceCont
     deviceContext->QueryInterface(IID_PPV_ARGS(&userAnnotation));
     std::memset(matrixStacks, 0, sizeof(matrixStacks));
     std::memset(matrixDirty, 0, sizeof(matrixDirty));
-    std::memset(matrixStackDepth, 0, sizeof(matrixStackDepth));
+    std::memset(stackPos, 0, sizeof(stackPos));
     std::memset(lightEnabled, 0, sizeof(lightEnabled));
     std::memset(lightDirection, 0, sizeof(lightDirection));
     std::memset(lightColour, 0, sizeof(lightColour));
@@ -73,10 +73,10 @@ Renderer::Context::Context(ID3D11Device *device, ID3D11DeviceContext *deviceCont
     blendFactor[3] = 0.0f;
 
     const DirectX::XMMATRIX identity = DirectX::XMMatrixIdentity();
-    for (unsigned int i = 0; i < 4; ++i)
+    for (unsigned int i = 0; i < MATRIX_MODE_MODELVIEW_MAX; ++i)
     {
         matrixStacks[i][0] = identity;
-        matrixStackDepth[i] = 0;
+        stackPos[i] = 0;
     }
 
     blendDesc.AlphaToCoverageEnable = FALSE;
@@ -133,7 +133,7 @@ Renderer::Context::Context(ID3D11Device *device, ID3D11DeviceContext *deviceCont
     D3D11_SUBRESOURCE_DATA cbData = {};
     cbDesc.ByteWidth = sizeof(DirectX::XMMATRIX);
     cbData.pSysMem = &identity;
-    device->CreateBuffer(&cbDesc, &cbData, &cbMatrix0);
+    device->CreateBuffer(&cbDesc, &cbData, &m_modelViewMatrix);
     device->CreateBuffer(&cbDesc, &cbData, &cbMatrix1);
     device->CreateBuffer(&cbDesc, &cbData, &cbMatrix2);
     device->CreateBuffer(&cbDesc, &cbData, &cbMatrix3);
@@ -172,7 +172,7 @@ Renderer::Context::Context(ID3D11Device *device, ID3D11DeviceContext *deviceCont
     device->CreateBuffer(&cbDesc, &cbData, &cbAux3);
     device->CreateBuffer(&cbDesc, &cbData, &cbAux4);
 
-    deviceContext->VSSetConstantBuffers(0, 10, &cbMatrix0);
+    deviceContext->VSSetConstantBuffers(0, 10, &m_modelViewMatrix);
     deviceContext->PSSetConstantBuffers(0, 6, &cbColour);
 
     {
@@ -197,7 +197,7 @@ void Renderer::CaptureScreen(ImageFileBuffer *, XSOCIAL_PREVIEWIMAGE *) {}
 
 void Renderer::Clear(int flags, D3D11_RECT *)
 {
-    Renderer::Context &context = this->getContext();
+    Renderer::Context &c = this->getContext();
 
     ID3D11BlendState *blendState = nullptr;
     ID3D11DepthStencilState *depthState = nullptr;
@@ -240,16 +240,16 @@ void Renderer::Clear(int flags, D3D11_RECT *)
     rasterDesc.MultisampleEnable = TRUE;
     m_pDevice->CreateRasterizerState(&rasterDesc, &rasterizerState);
 
-    context.m_pDeviceContext->VSSetShader(screenClearVertexShader, nullptr, 0);
-    context.m_pDeviceContext->IASetInputLayout(nullptr);
-    context.m_pDeviceContext->PSSetShader(screenClearPixelShader, nullptr, 0);
-    context.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
-    context.m_pDeviceContext->OMSetBlendState(blendState, nullptr, 0xFFFFFFFFu);
-    context.m_pDeviceContext->OMSetDepthStencilState(depthState, 0);
-    context.m_pDeviceContext->RSSetState(rasterizerState);
-    context.m_pDeviceContext->PSSetShaderResources(0, 0, nullptr);
-    context.m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-    context.m_pDeviceContext->Draw(4, 0);
+    c.m_pDeviceContext->VSSetShader(screenClearVertexShader, nullptr, 0);
+    c.m_pDeviceContext->IASetInputLayout(nullptr);
+    c.m_pDeviceContext->PSSetShader(screenClearPixelShader, nullptr, 0);
+    c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
+    c.m_pDeviceContext->OMSetBlendState(blendState, nullptr, 0xFFFFFFFFu);
+    c.m_pDeviceContext->OMSetDepthStencilState(depthState, 0);
+    c.m_pDeviceContext->RSSetState(rasterizerState);
+    c.m_pDeviceContext->PSSetShaderResources(0, 0, nullptr);
+    c.m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    c.m_pDeviceContext->Draw(4, 0);
 
     if (blendState)
     {
@@ -267,10 +267,10 @@ void Renderer::Clear(int flags, D3D11_RECT *)
         rasterizerState = nullptr;
     }
 
-    context.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), context.blendFactor, 0xFFFFFFFFu);
-    context.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
-    context.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
-    context.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
+    c.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), c.blendFactor, 0xFFFFFFFFu);
+    c.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
+    c.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
+    c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
     activeVertexType = 0xFFFFFFFFu;
     activePixelType = 0xFFFFFFFFu;
 }
@@ -301,24 +301,23 @@ void Renderer::EndConditionalSurvey() {}
 
 void Renderer::BeginEvent(LPCWSTR eventName)
 {
-    Renderer::Context *context = static_cast<Renderer::Context *>(TlsGetValue(Renderer::tlsIdx));
-    if (context && context->m_pDeviceContext->GetType() != D3D11_DEVICE_CONTEXT_DEFERRED && context->userAnnotation)
+    Renderer::Context &c = Renderer::getContext();
+    if (c.m_pDeviceContext->GetType() != D3D11_DEVICE_CONTEXT_DEFERRED && c.userAnnotation)
     {
-        context->userAnnotation->BeginEvent(eventName);
-        ++context->contextStateFlags;
+        c.userAnnotation->BeginEvent(eventName);
+        ++c.annotateDepth;
     }
 }
 
 void Renderer::EndEvent()
 {
-    Renderer::Context *context = static_cast<Renderer::Context *>(TlsGetValue(Renderer::tlsIdx));
-    if (context && context->m_pDeviceContext->GetType() != D3D11_DEVICE_CONTEXT_DEFERRED && context->userAnnotation)
+    Renderer::Context &c = Renderer::getContext();
+    if (c.m_pDeviceContext->GetType() != D3D11_DEVICE_CONTEXT_DEFERRED && c.userAnnotation)
     {
-        context->userAnnotation->EndEvent();
-        if (context->contextStateFlags > 0)
-        {
-            --context->contextStateFlags;
-        }
+        c.userAnnotation->EndEvent();
+        
+        --c.annotateDepth;
+        assert(c.annotateDepth >= 0);
     }
 }
 
@@ -412,9 +411,15 @@ void Renderer::Initialise(ID3D11Device *pDevice, IDXGISwapChain *pSwapChain)
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
-        m_pDevice->CreateTexture2D(&desc, nullptr, &renderTargetTextures[i]);
-        m_pDevice->CreateRenderTargetView(renderTargetTextures[i], nullptr, &renderTargetViews[i]);
-        m_pDevice->CreateShaderResourceView(renderTargetTextures[i], nullptr, &renderTargetShaderResourceViews[i]);
+        HRESULT hr = 0;
+        hr = m_pDevice->CreateTexture2D(&desc, nullptr, &renderTargetTextures[i]);
+        assert(hr == S_OK);
+
+        hr = m_pDevice->CreateRenderTargetView(renderTargetTextures[i], nullptr, &renderTargetViews[i]);
+        assert(hr == S_OK);
+
+        hr = m_pDevice->CreateShaderResourceView(renderTargetTextures[i], nullptr, &renderTargetShaderResourceViews[i]);
+        assert(hr == S_OK);
     }
 
     std::memset(m_textures, 0, sizeof(m_textures));
@@ -457,7 +462,10 @@ void Renderer::Initialise(ID3D11Device *pDevice, IDXGISwapChain *pSwapChain)
     quadIndexDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
     D3D11_SUBRESOURCE_DATA quadIndexData = {};
     quadIndexData.pSysMem = quadIndices;
-    m_pDevice->CreateBuffer(&quadIndexDesc, &quadIndexData, &quadIndexBuffer);
+    
+    HRESULT hr = m_pDevice->CreateBuffer(&quadIndexDesc, &quadIndexData, &quadIndexBuffer);
+    assert(hr >= 0);
+    
     delete[] quadIndices;
 
     unsigned short *fanIndices = new unsigned short[0x2FFFAu];
@@ -493,8 +501,8 @@ ID3D11DeviceContext *Renderer::InitialiseContext(bool fromPresent)
         m_pDevice->CreateDeferredContext(0, &deviceContext);
     }
 
-    Renderer::Context *context = new (std::nothrow) Renderer::Context(m_pDevice, deviceContext);
-    TlsSetValue(Renderer::tlsIdx, context);
+    Renderer::Context *c = new (std::nothrow) Renderer::Context(m_pDevice, deviceContext);
+    TlsSetValue(Renderer::tlsIdx, c);
     return deviceContext;
 }
 
@@ -585,13 +593,13 @@ void Renderer::SetClearColour(const float colourRGBA[4])
 {
     std::memcpy(m_fClearColor, colourRGBA, sizeof(m_fClearColor));
 
-    Renderer::Context *context = static_cast<Renderer::Context *>(TlsGetValue(Renderer::tlsIdx));
-    if (context)
+    Renderer::Context *c = static_cast<Renderer::Context *>(TlsGetValue(Renderer::tlsIdx));
+    if (c)
     {
         D3D11_MAPPED_SUBRESOURCE mapped = {};
-        context->m_pDeviceContext->Map(context->cbAux3, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+        c->m_pDeviceContext->Map(c->cbAux3, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
         std::memcpy(mapped.pData, colourRGBA, sizeof(float) * 4);
-        context->m_pDeviceContext->Unmap(context->cbAux3, 0);
+        c->m_pDeviceContext->Unmap(c->cbAux3, 0);
     }
 }
 
@@ -619,36 +627,36 @@ void Renderer::SetupShaders()
     screenSpacePixelShader = nullptr;
     screenClearPixelShader = nullptr;
 
-    m_pDevice->CreateVertexShader(VS_PF3_TF2_CB4_NB4_XW1_Data, sizeof(VS_PF3_TF2_CB4_NB4_XW1_Data), nullptr,
+    m_pDevice->CreateVertexShader(g_main_VS_PF3_TF2_CB4_NB4_XW1, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1), nullptr,
                                   &vertexShaderTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1]);
-    m_pDevice->CreateVertexShader(VS_Compressed_Data, sizeof(VS_Compressed_Data), nullptr, &vertexShaderTable[C4JRender::VERTEX_TYPE_COMPRESSED]);
-    m_pDevice->CreateVertexShader(VS_PF3_TF2_CB4_NB4_XW1_Lighting_Data, sizeof(VS_PF3_TF2_CB4_NB4_XW1_Lighting_Data), nullptr,
+    m_pDevice->CreateVertexShader(g_main_VS_Compressed, sizeof(g_main_VS_Compressed), nullptr, &vertexShaderTable[C4JRender::VERTEX_TYPE_COMPRESSED]);
+    m_pDevice->CreateVertexShader(g_main_VS_PF3_TF2_CB4_NB4_XW1_LIGHTING, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1_LIGHTING), nullptr,
                                   &vertexShaderTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT]);
-    m_pDevice->CreateVertexShader(VS_PF3_TF2_CB4_NB4_XW1_Texgen_Data, sizeof(VS_PF3_TF2_CB4_NB4_XW1_Texgen_Data), nullptr,
+    m_pDevice->CreateVertexShader(g_main_VS_PF3_TF2_CB4_NB4_XW1_TEXGEN, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1_TEXGEN), nullptr,
                                   &vertexShaderTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_TEXGEN]);
-    m_pDevice->CreateVertexShader(VS_ScreenSpace_Data, sizeof(VS_ScreenSpace_Data), nullptr, &screenSpaceVertexShader);
-    m_pDevice->CreateVertexShader(VS_ScreenClear_Data, sizeof(VS_ScreenClear_Data), nullptr, &screenClearVertexShader);
+    m_pDevice->CreateVertexShader(g_main_VS_ScreenSpace, sizeof(g_main_VS_ScreenSpace), nullptr, &screenSpaceVertexShader);
+    m_pDevice->CreateVertexShader(g_main_VS_ScreenClear, sizeof(g_main_VS_ScreenClear), nullptr, &screenClearVertexShader);
 
-    m_pDevice->CreatePixelShader(PS_Standard_Data, sizeof(PS_Standard_Data), nullptr, &pixelShaderTable[C4JRender::PIXEL_SHADER_TYPE_STANDARD]);
-    m_pDevice->CreatePixelShader(PS_TextureProjection_Data, sizeof(PS_TextureProjection_Data), nullptr,
+    m_pDevice->CreatePixelShader(g_main_PS_Standard, sizeof(g_main_PS_Standard), nullptr, &pixelShaderTable[C4JRender::PIXEL_SHADER_TYPE_STANDARD]);
+    m_pDevice->CreatePixelShader(g_main_PS_TextureProjection, sizeof(g_main_PS_TextureProjection), nullptr,
                                  &pixelShaderTable[C4JRender::PIXEL_SHADER_TYPE_PROJECTION]);
-    m_pDevice->CreatePixelShader(PS_ForceLOD_Data, sizeof(PS_ForceLOD_Data), nullptr, &pixelShaderTable[C4JRender::PIXEL_SHADER_TYPE_FORCELOD]);
-    m_pDevice->CreatePixelShader(PS_ScreenSpace_Data, sizeof(PS_ScreenSpace_Data), nullptr, &screenSpacePixelShader);
-    m_pDevice->CreatePixelShader(PS_ScreenClear_Data, sizeof(PS_ScreenClear_Data), nullptr, &screenClearPixelShader);
+    m_pDevice->CreatePixelShader(g_main_PS_ForceLOD, sizeof(g_main_PS_ForceLOD), nullptr, &pixelShaderTable[C4JRender::PIXEL_SHADER_TYPE_FORCELOD]);
+    m_pDevice->CreatePixelShader(g_main_PS_ScreenSpace, sizeof(g_main_PS_ScreenSpace), nullptr, &screenSpacePixelShader);
+    m_pDevice->CreatePixelShader(g_main_PS_ScreenClear, sizeof(g_main_PS_ScreenClear), nullptr, &screenClearPixelShader);
 
-    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, VS_PF3_TF2_CB4_NB4_XW1_Data, sizeof(VS_PF3_TF2_CB4_NB4_XW1_Data),
+    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, g_main_VS_PF3_TF2_CB4_NB4_XW1, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1),
                                  &inputLayoutTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1]);
-    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_Compressed, 2, VS_Compressed_Data, sizeof(VS_Compressed_Data),
+    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_Compressed, 2, g_main_VS_Compressed, sizeof(g_main_VS_Compressed),
                                  &inputLayoutTable[C4JRender::VERTEX_TYPE_COMPRESSED]);
-    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, VS_PF3_TF2_CB4_NB4_XW1_Lighting_Data,
-                                 sizeof(VS_PF3_TF2_CB4_NB4_XW1_Lighting_Data), &inputLayoutTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT]);
-    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, VS_PF3_TF2_CB4_NB4_XW1_Texgen_Data,
-                                 sizeof(VS_PF3_TF2_CB4_NB4_XW1_Texgen_Data), &inputLayoutTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_TEXGEN]);
+    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, g_main_VS_PF3_TF2_CB4_NB4_XW1_LIGHTING,
+                                 sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1_LIGHTING), &inputLayoutTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT]);
+    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, g_main_VS_PF3_TF2_CB4_NB4_XW1_TEXGEN,
+                                 sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1_TEXGEN), &inputLayoutTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_TEXGEN]);
 }
 
 void Renderer::StartFrame()
 {
-    Renderer::Context &context = this->getContext();
+    Renderer::Context &c = this->getContext();
 
     activeVertexType = 0xFFFFFFFFu;
     activePixelType = 0xFFFFFFFFu;
@@ -668,8 +676,8 @@ void Renderer::StartFrame()
     this->StateSetDepthTestEnable(false);
     this->StateSetAlphaTestEnable(true);
 
-    context.m_pDeviceContext->VSSetConstantBuffers(0, 10, &context.cbMatrix0);
-    context.m_pDeviceContext->PSSetConstantBuffers(0, 6, &context.cbColour);
+    c.m_pDeviceContext->VSSetConstantBuffers(0, 10, &c.m_modelViewMatrix);
+    c.m_pDeviceContext->PSSetConstantBuffers(0, 6, &c.cbColour);
 
     D3D11_VIEWPORT viewport = {};
     viewport.TopLeftX = 0.0f;
@@ -678,8 +686,8 @@ void Renderer::StartFrame()
     viewport.Height = (float)backBufferHeight;
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
-    context.m_pDeviceContext->RSSetViewports(1, &viewport);
-    context.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
+    c.m_pDeviceContext->RSSetViewports(1, &viewport);
+    c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
 }
 
 void Renderer::Suspend()
@@ -701,7 +709,7 @@ Renderer::Context &Renderer::getContext()
 
 void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
 {
-    Renderer::Context &context = this->getContext();
+    Renderer::Context &c = this->getContext();
 
     float left;
     float bottom;
@@ -819,12 +827,12 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     samplerDesc.MaxLOD = (std::numeric_limits<float>::max)();
     m_pDevice->CreateSamplerState(&samplerDesc, &samplerState);
 
-    context.m_pDeviceContext->VSSetShader(screenSpaceVertexShader, nullptr, 0);
-    context.m_pDeviceContext->IASetInputLayout(nullptr);
-    context.m_pDeviceContext->PSSetShader(screenSpacePixelShader, nullptr, 0);
-    context.m_pDeviceContext->OMSetBlendState(blendState, nullptr, 0xFFFFFFFFu);
-    context.m_pDeviceContext->OMSetDepthStencilState(depthState, 0);
-    context.m_pDeviceContext->RSSetState(rasterizerState);
+    c.m_pDeviceContext->VSSetShader(screenSpaceVertexShader, nullptr, 0);
+    c.m_pDeviceContext->IASetInputLayout(nullptr);
+    c.m_pDeviceContext->PSSetShader(screenSpacePixelShader, nullptr, 0);
+    c.m_pDeviceContext->OMSetBlendState(blendState, nullptr, 0xFFFFFFFFu);
+    c.m_pDeviceContext->OMSetDepthStencilState(depthState, 0);
+    c.m_pDeviceContext->RSSetState(rasterizerState);
 
     for (unsigned int i = 0; i < MAX_MIP_LEVELS - 1; ++i)
     {
@@ -836,16 +844,16 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
         viewport.MinDepth = 0.0f;
         viewport.MaxDepth = 1.0f;
 
-        context.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetViews[i], nullptr);
-        context.m_pDeviceContext->RSSetViewports(1, &viewport);
+        c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetViews[i], nullptr);
+        c.m_pDeviceContext->RSSetViewports(1, &viewport);
 
         ID3D11ShaderResourceView *inputTexture = (i == 0) ? renderTargetShaderResourceView : renderTargetShaderResourceViews[i - 1];
-        context.m_pDeviceContext->PSSetShaderResources(0, 1, &inputTexture);
-        context.m_pDeviceContext->PSSetSamplers(0, 1, &samplerState);
-        context.m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+        c.m_pDeviceContext->PSSetShaderResources(0, 1, &inputTexture);
+        c.m_pDeviceContext->PSSetSamplers(0, 1, &samplerState);
+        c.m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
         D3D11_MAPPED_SUBRESOURCE mapped = {};
-        context.m_pDeviceContext->Map(context.cbAux1, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+        c.m_pDeviceContext->Map(c.cbAux1, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
         float *constants = static_cast<float *>(mapped.pData);
         if (i == 0)
         {
@@ -861,8 +869,8 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
             constants[2] = 1.0f;
             constants[3] = 1.0f;
         }
-        context.m_pDeviceContext->Unmap(context.cbAux1, 0);
-        context.m_pDeviceContext->Draw(4, 0);
+        c.m_pDeviceContext->Unmap(c.cbAux1, 0);
+        c.m_pDeviceContext->Draw(4, 0);
     }
 
     D3D11_TEXTURE2D_DESC desc = {};
@@ -876,9 +884,9 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     unsigned char *linearData = new unsigned char[kThumbnailSize * kThumbnailSize * 4u];
     if (stagingTexture)
     {
-        context.m_pDeviceContext->CopyResource(stagingTexture, renderTargetTextures[MAX_MIP_LEVELS - 2]);
+        c.m_pDeviceContext->CopyResource(stagingTexture, renderTargetTextures[MAX_MIP_LEVELS - 2]);
         D3D11_MAPPED_SUBRESOURCE mapped = {};
-        if (SUCCEEDED(context.m_pDeviceContext->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mapped)))
+        if (SUCCEEDED(c.m_pDeviceContext->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mapped)))
         {
             const unsigned char *src = static_cast<const unsigned char *>(mapped.pData);
             unsigned char *dst = linearData;
@@ -892,7 +900,7 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
                 src += mapped.RowPitch;
                 dst += kThumbnailSize * 4u;
             }
-            context.m_pDeviceContext->Unmap(stagingTexture, 0);
+            c.m_pDeviceContext->Unmap(stagingTexture, 0);
         }
     }
 
@@ -925,9 +933,9 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
         blendState = nullptr;
     }
 
-    context.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), context.blendFactor, 0xFFFFFFFFu);
-    context.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
-    context.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
+    c.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), c.blendFactor, 0xFFFFFFFFu);
+    c.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
+    c.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
 
     D3D11_VIEWPORT viewport = {};
     viewport.TopLeftX = 0.0f;
@@ -936,8 +944,8 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     viewport.Height = (float)backBufferHeight;
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
-    context.m_pDeviceContext->RSSetViewports(1, &viewport);
-    context.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
+    c.m_pDeviceContext->RSSetViewports(1, &viewport);
+    c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
     activeVertexType = 0xFFFFFFFFu;
     activePixelType = 0xFFFFFFFFu;
 }

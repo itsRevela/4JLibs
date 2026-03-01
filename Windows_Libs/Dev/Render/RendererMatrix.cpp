@@ -5,15 +5,17 @@
 
 const float *Renderer::MatrixGet(int type)
 {
-    Context &context = this->getContext();
-    const int depth = context.matrixStackDepth[type];
-    return reinterpret_cast<const float *>(&context.matrixStacks[type][depth]);
+    Context &c = this->getContext();
+    const int depth = c.stackPos[type];
+    return reinterpret_cast<const float *>(&c.matrixStacks[type][depth]);
 }
 
 void Renderer::MatrixMode(int type)
 {
-    Context &context = this->getContext();
-    context.matrixModeType = type;
+    Context &c = this->getContext();
+    assert(type >= 0);
+    assert(type < STACK_TYPES);
+    c.stackType = type;
 }
 
 void Renderer::MatrixMult(float *mat)
@@ -38,19 +40,25 @@ void Renderer::MatrixPerspective(float fovy, float aspect, float zNear, float zF
 
 void Renderer::MatrixPop()
 {
-    Context &context = this->getContext();
-    const int mode = context.matrixModeType;
-    --context.matrixStackDepth[mode];
-    context.matrixDirty[mode] = true;
+    Context &c = this->getContext();
+
+    assert(c.stackPos[c.stackType] > 0);
+
+    const int mode = c.stackType;
+    --c.stackPos[mode];
+    c.matrixDirty[mode] = true;
 }
 
 void Renderer::MatrixPush()
 {
-    Context &context = this->getContext();
-    const int mode = context.matrixModeType;
-    const int depth = context.matrixStackDepth[mode];
-    context.matrixStacks[mode][depth + 1] = context.matrixStacks[mode][depth];
-    ++context.matrixStackDepth[mode];
+    Context &c = this->getContext();
+    
+    assert(c.stackPos[c.stackType] < (STACK_SIZE - 1));
+
+    const int mode = c.stackType;
+    const int depth = c.stackPos[mode];
+    c.matrixStacks[mode][depth + 1] = c.matrixStacks[mode][depth];
+    ++c.stackPos[mode];
 }
 
 void Renderer::MatrixRotate(float angle, float x, float y, float z)
@@ -68,11 +76,11 @@ void Renderer::MatrixScale(float x, float y, float z)
 
 void Renderer::MatrixSetIdentity()
 {
-    Context &context = this->getContext();
-    const int mode = context.matrixModeType;
-    const int depth = context.matrixStackDepth[mode];
-    context.matrixStacks[mode][depth] = DirectX::XMMatrixIdentity();
-    context.matrixDirty[mode] = true;
+    Context &c = this->getContext();
+    const int mode = c.stackType;
+    const int depth = c.stackPos[mode];
+    c.matrixStacks[mode][depth] = DirectX::XMMatrixIdentity();
+    c.matrixDirty[mode] = true;
 }
 
 void Renderer::MatrixTranslate(float x, float y, float z)
@@ -83,28 +91,28 @@ void Renderer::MatrixTranslate(float x, float y, float z)
 
 void Renderer::MultWithStack(DirectX::XMMATRIX matrix)
 {
-    Context &context = this->getContext();
-    const int mode = context.matrixModeType;
-    const int depth = context.matrixStackDepth[mode];
-    DirectX::XMMATRIX &current = context.matrixStacks[mode][depth];
+    Context &c = this->getContext();
+    const int mode = c.stackType;
+    const int depth = c.stackPos[mode];
+    DirectX::XMMATRIX &current = c.matrixStacks[mode][depth];
     current = DirectX::XMMatrixMultiply(matrix, current);
-    context.matrixDirty[mode] = true;
+    c.matrixDirty[mode] = true;
 }
 
 void Renderer::Set_matrixDirty()
 {
-    Context &context = this->getContext();
+    Context &c = this->getContext();
     const DirectX::XMMATRIX identity = DirectX::XMMatrixIdentity();
 
-    context.matrixStacks[0][0] = identity;
-    context.matrixStacks[1][0] = identity;
-    context.matrixStacks[2][0] = identity;
-    context.matrixStacks[3][0] = identity;
+    c.matrixStacks[MATRIX_MODE_MODELVIEW][0] = identity;
+    c.matrixStacks[MATRIX_MODE_MODELVIEW_UNK1][0] = identity;
+    c.matrixStacks[MATRIX_MODE_MODELVIEW_UNK2][0] = identity;
+    c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][0] = identity;
 
-    context.matrixDirty[0] = true;
-    context.matrixDirty[1] = true;
-    context.matrixDirty[2] = true;
-    context.matrixDirty[3] = true;
+    c.matrixDirty[MATRIX_MODE_MODELVIEW] = true;
+    c.matrixDirty[MATRIX_MODE_MODELVIEW_UNK1] = true;
+    c.matrixDirty[MATRIX_MODE_MODELVIEW_UNK2] = true;
+    c.matrixDirty[MATRIX_MODE_MODELVIEW_CBUFF] = true;
 
     activeVertexType = 0xFFFFFFFFu;
     activePixelType = 0xFFFFFFFFu;

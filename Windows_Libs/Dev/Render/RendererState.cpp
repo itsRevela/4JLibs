@@ -7,8 +7,8 @@
 
 ID3D11BlendState *Renderer::GetManagedBlendState()
 {
-    Context &context = this->getContext();
-    const D3D11_RENDER_TARGET_BLEND_DESC &rtBlend = context.blendDesc.RenderTarget[0];
+    Context &c = this->getContext();
+    const D3D11_RENDER_TARGET_BLEND_DESC &rtBlend = c.blendDesc.RenderTarget[0];
 
     const int key = (rtBlend.BlendEnable ? 1 : 0) | ((static_cast<int>(rtBlend.SrcBlend) & 0x1F) << 1) |
                     ((static_cast<int>(rtBlend.DestBlend) & 0x1F) << 6) | ((static_cast<int>(rtBlend.RenderTargetWriteMask) & 0x0F) << 11);
@@ -20,17 +20,17 @@ ID3D11BlendState *Renderer::GetManagedBlendState()
     }
 
     ID3D11BlendState *state = nullptr;
-    m_pDevice->CreateBlendState(&context.blendDesc, &state);
+    m_pDevice->CreateBlendState(&c.blendDesc, &state);
     managedBlendStates.emplace(key, state);
     return state;
 }
 
 ID3D11DepthStencilState *Renderer::GetManagedDepthStencilState()
 {
-    Context &context = this->getContext();
+    Context &c = this->getContext();
 
-    const int key = (context.depthStencilDesc.DepthEnable ? 2 : 0) | ((static_cast<int>(context.depthStencilDesc.DepthFunc) & 0x0F) << 2) |
-                    (context.depthStencilDesc.DepthWriteMask == D3D11_DEPTH_WRITE_MASK_ALL ? 1 : 0);
+    const int key = (c.depthStencilDesc.DepthEnable ? 2 : 0) | ((static_cast<int>(c.depthStencilDesc.DepthFunc) & 0x0F) << 2) |
+                    (c.depthStencilDesc.DepthWriteMask == D3D11_DEPTH_WRITE_MASK_ALL ? 1 : 0);
 
     auto it = managedDepthStencilStates.find(key);
     if (it != managedDepthStencilStates.end())
@@ -39,18 +39,18 @@ ID3D11DepthStencilState *Renderer::GetManagedDepthStencilState()
     }
 
     ID3D11DepthStencilState *state = nullptr;
-    m_pDevice->CreateDepthStencilState(&context.depthStencilDesc, &state);
+    m_pDevice->CreateDepthStencilState(&c.depthStencilDesc, &state);
     managedDepthStencilStates.emplace(key, state);
     return state;
 }
 
 ID3D11RasterizerState *Renderer::GetManagedRasterizerState()
 {
-    Context &context = this->getContext();
+    Context &c = this->getContext();
 
-    const int key = (static_cast<std::uint8_t>(context.rasterizerDesc.DepthBias)) |
-                    (static_cast<std::uint8_t>(static_cast<int>(context.rasterizerDesc.SlopeScaledDepthBias)) << 8) |
-                    ((static_cast<int>(context.rasterizerDesc.CullMode) & 0x03) << 16);
+    const int key = (static_cast<std::uint8_t>(c.rasterizerDesc.DepthBias)) |
+                    (static_cast<std::uint8_t>(static_cast<int>(c.rasterizerDesc.SlopeScaledDepthBias)) << 8) |
+                    ((static_cast<int>(c.rasterizerDesc.CullMode) & 0x03) << 16);
 
     auto it = managedRasterizerStates.find(key);
     if (it != managedRasterizerStates.end())
@@ -59,15 +59,15 @@ ID3D11RasterizerState *Renderer::GetManagedRasterizerState()
     }
 
     ID3D11RasterizerState *state = nullptr;
-    m_pDevice->CreateRasterizerState(&context.rasterizerDesc, &state);
+    m_pDevice->CreateRasterizerState(&c.rasterizerDesc, &state);
     managedRasterizerStates.emplace(key, state);
     return state;
 }
 
 ID3D11SamplerState *Renderer::GetManagedSamplerState()
 {
-    Context &context = this->getContext();
-    const int key = m_textures[context.boundTextureIndex].samplerParams;
+    Context &c = this->getContext();
+    const int key = m_textures[c.textureIdx].samplerParams;
 
     auto it = managedSamplerStates.find(key);
     if (it != managedSamplerStates.end())
@@ -104,54 +104,54 @@ ID3D11SamplerState *Renderer::GetManagedSamplerState()
 
 void Renderer::StateSetFogEnable(bool enable)
 {
-    Context &context = this->getContext();
-    context.fogEnabled = enable ? 1 : 0;
+    Context &c = this->getContext();
+    c.fogEnabled = enable ? 1 : 0;
 }
 
 void Renderer::StateSetFogMode(int mode)
 {
-    Context &context = this->getContext();
-    context.fogMode = mode;
+    Context &c = this->getContext();
+    c.fogMode = mode;
 }
 
 void Renderer::StateSetFogNearDistance(float dist)
 {
-    Context &context = this->getContext();
-    context.fogNearDistance = dist;
+    Context &c = this->getContext();
+    c.fogNearDistance = dist;
 }
 
 void Renderer::StateSetFogFarDistance(float dist)
 {
-    Context &context = this->getContext();
-    context.fogFarDistance = dist;
+    Context &c = this->getContext();
+    c.fogFarDistance = dist;
 }
 
 void Renderer::StateSetFogDensity(float density)
 {
-    Context &context = this->getContext();
-    context.fogDensity = density;
+    Context &c = this->getContext();
+    c.fogDensity = density;
 }
 
 void Renderer::StateSetFogColour(float red, float green, float blue)
 {
-    Context &context = this->getContext();
-    context.fogColourRed = red;
-    context.fogColourBlue = blue;
-    context.fogColourGreen = green;
+    Context &c = this->getContext();
+    c.fogColourRed = red;
+    c.fogColourBlue = blue;
+    c.fogColourGreen = green;
 }
 
 void Renderer::UpdateViewportState() {}
 
 void Renderer::StateSetLightingEnable(bool enable)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetLightingEnable(enable);
+        c.commandBuffer->SetLightingEnable(enable);
         return;
     }
 
-    context.lightingEnabled = enable ? 1 : 0;
+    c.lightingEnabled = enable ? 1 : 0;
 }
 
 void Renderer::StateSetLightColour(int light, float red, float green, float blue)
@@ -161,34 +161,34 @@ void Renderer::StateSetLightColour(int light, float red, float green, float blue
         return;
     }
 
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetLightColour(light, red, green, blue);
+        c.commandBuffer->SetLightColour(light, red, green, blue);
         return;
     }
 
-    context.lightColour[light].x = red;
-    context.lightColour[light].y = green;
-    context.lightColour[light].z = blue;
-    context.lightColour[light].w = 1.0f;
-    context.lightingDirty = 1;
+    c.lightColour[light].x = red;
+    c.lightColour[light].y = green;
+    c.lightColour[light].z = blue;
+    c.lightColour[light].w = 1.0f;
+    c.lightingDirty = 1;
 }
 
 void Renderer::StateSetLightAmbientColour(float red, float green, float blue)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetLightAmbientColour(red, green, blue);
+        c.commandBuffer->SetLightAmbientColour(red, green, blue);
         return;
     }
 
-    context.lightAmbientColour.x = red;
-    context.lightAmbientColour.y = green;
-    context.lightAmbientColour.z = blue;
-    context.lightAmbientColour.w = 1.0f;
-    context.lightingDirty = 1;
+    c.lightAmbientColour.x = red;
+    c.lightAmbientColour.y = green;
+    c.lightAmbientColour.z = blue;
+    c.lightAmbientColour.w = 1.0f;
+    c.lightingDirty = 1;
 }
 
 void Renderer::StateSetLightEnable(int light, bool enable)
@@ -198,152 +198,152 @@ void Renderer::StateSetLightEnable(int light, bool enable)
         return;
     }
 
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetLightEnable(light, enable);
+        c.commandBuffer->SetLightEnable(light, enable);
         return;
     }
 
-    context.lightEnabled[light] = enable ? 1 : 0;
-    context.lightingDirty = 1;
+    c.lightEnabled[light] = enable ? 1 : 0;
+    c.lightingDirty = 1;
 }
 
 void Renderer::StateSetColour(float r, float g, float b, float a)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetColor(r, g, b, a);
+        c.commandBuffer->SetColor(r, g, b, a);
         return;
     }
 
-    ID3D11DeviceContext *d3d11 = context.m_pDeviceContext;
+    ID3D11DeviceContext *d3d11 = c.m_pDeviceContext;
     const float colour[4] = {r, g, b, a};
 
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    d3d11->Map(context.cbColour, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    d3d11->Map(c.cbColour, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     std::memcpy(mapped.pData, colour, sizeof(colour));
-    d3d11->Unmap(context.cbColour, 0);
+    d3d11->Unmap(c.cbColour, 0);
 }
 
 void Renderer::StateSetDepthMask(bool enable)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetDepthMask(enable);
+        c.commandBuffer->SetDepthMask(enable);
         return;
     }
 
-    context.depthStencilDesc.DepthWriteMask = enable ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
-    context.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
-    context.depthWriteEnabled = enable ? 1 : 0;
+    c.depthStencilDesc.DepthWriteMask = enable ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
+    c.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
+    c.depthWriteEnabled = enable ? 1 : 0;
 }
 
 void Renderer::StateSetBlendEnable(bool enable)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetBlendEnable(enable);
+        c.commandBuffer->SetBlendEnable(enable);
         return;
     }
 
-    context.blendDesc.RenderTarget[0].BlendEnable = enable ? TRUE : FALSE;
-    context.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), context.blendFactor, 0xFFFFFFFFu);
+    c.blendDesc.RenderTarget[0].BlendEnable = enable ? TRUE : FALSE;
+    c.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), c.blendFactor, 0xFFFFFFFFu);
 }
 
 void Renderer::StateSetBlendFunc(int src, int dst)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetBlendFunc(src, dst);
+        c.commandBuffer->SetBlendFunc(src, dst);
         return;
     }
 
-    context.blendDesc.RenderTarget[0].SrcBlend = static_cast<D3D11_BLEND>(src);
-    context.blendDesc.RenderTarget[0].DestBlend = static_cast<D3D11_BLEND>(dst);
-    context.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), context.blendFactor, 0xFFFFFFFFu);
+    c.blendDesc.RenderTarget[0].SrcBlend = static_cast<D3D11_BLEND>(src);
+    c.blendDesc.RenderTarget[0].DestBlend = static_cast<D3D11_BLEND>(dst);
+    c.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), c.blendFactor, 0xFFFFFFFFu);
 }
 
 void Renderer::StateSetBlendFactor(unsigned int colour)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetBlendFactor(colour);
+        c.commandBuffer->SetBlendFactor(colour);
         return;
     }
 
     const float scale = 255.0f;
-    context.blendFactor[0] = static_cast<float>((colour >> 0) & 0xFFu) / scale;
-    context.blendFactor[1] = static_cast<float>((colour >> 8) & 0xFFu) / scale;
-    context.blendFactor[2] = static_cast<float>((colour >> 16) & 0xFFu) / scale;
-    context.blendFactor[3] = static_cast<float>((colour >> 24) & 0xFFu) / scale;
-    context.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), context.blendFactor, 0xFFFFFFFFu);
+    c.blendFactor[0] = static_cast<float>((colour >> 0) & 0xFFu) / scale;
+    c.blendFactor[1] = static_cast<float>((colour >> 8) & 0xFFu) / scale;
+    c.blendFactor[2] = static_cast<float>((colour >> 16) & 0xFFu) / scale;
+    c.blendFactor[3] = static_cast<float>((colour >> 24) & 0xFFu) / scale;
+    c.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), c.blendFactor, 0xFFFFFFFFu);
 }
 
 void Renderer::StateSetAlphaFunc(int, float param)
 {
-    Context &context = this->getContext();
-    context.alphaReference = param;
+    Context &c = this->getContext();
+    c.alphaReference = param;
 
-    const float alpha[4] = {0.0f, 0.0f, 0.0f, context.alphaTestEnabled ? context.alphaReference : 0.0f};
+    const float alpha[4] = {0.0f, 0.0f, 0.0f, c.alphaTestEnabled ? c.alphaReference : 0.0f};
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    context.m_pDeviceContext->Map(context.cbAlphaTest, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    c.m_pDeviceContext->Map(c.cbAlphaTest, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     std::memcpy(mapped.pData, alpha, sizeof(alpha));
-    context.m_pDeviceContext->Unmap(context.cbAlphaTest, 0);
+    c.m_pDeviceContext->Unmap(c.cbAlphaTest, 0);
 }
 
 void Renderer::StateSetDepthFunc(int func)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetDepthFunc(func);
+        c.commandBuffer->SetDepthFunc(func);
         return;
     }
 
-    context.depthStencilDesc.DepthFunc = static_cast<D3D11_COMPARISON_FUNC>(func);
-    context.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
+    c.depthStencilDesc.DepthFunc = static_cast<D3D11_COMPARISON_FUNC>(func);
+    c.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
 }
 
 void Renderer::StateSetFaceCull(bool enable)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetFaceCull(enable);
+        c.commandBuffer->SetFaceCull(enable);
         return;
     }
 
-    context.rasterizerDesc.CullMode = enable ? D3D11_CULL_BACK : D3D11_CULL_NONE;
-    context.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
-    context.faceCullEnabled = enable ? 1 : 0;
+    c.rasterizerDesc.CullMode = enable ? D3D11_CULL_BACK : D3D11_CULL_NONE;
+    c.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
+    c.faceCullEnabled = enable ? 1 : 0;
 }
 
 void Renderer::StateSetFaceCullCW(bool enable)
 {
-    Context &context = this->getContext();
-    if (context.faceCullEnabled)
+    Context &c = this->getContext();
+    if (c.faceCullEnabled)
     {
-        context.rasterizerDesc.CullMode = enable ? D3D11_CULL_BACK : D3D11_CULL_FRONT;
+        c.rasterizerDesc.CullMode = enable ? D3D11_CULL_BACK : D3D11_CULL_FRONT;
     }
     else
     {
-        context.rasterizerDesc.CullMode = D3D11_CULL_NONE;
+        c.rasterizerDesc.CullMode = D3D11_CULL_NONE;
     }
 
-    context.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
+    c.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
 }
 
 void Renderer::StateSetLineWidth(float) {}
 
 void Renderer::StateSetWriteEnable(bool red, bool green, bool blue, bool alpha)
 {
-    Context &context = this->getContext();
+    Context &c = this->getContext();
 
     std::uint8_t mask = 0;
     mask |= red ? 0x1 : 0;
@@ -351,127 +351,127 @@ void Renderer::StateSetWriteEnable(bool red, bool green, bool blue, bool alpha)
     mask |= blue ? 0x4 : 0;
     mask |= alpha ? 0x8 : 0;
 
-    context.blendDesc.RenderTarget[0].RenderTargetWriteMask = mask;
-    context.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), context.blendFactor, 0xFFFFFFFFu);
+    c.blendDesc.RenderTarget[0].RenderTargetWriteMask = mask;
+    c.m_pDeviceContext->OMSetBlendState(this->GetManagedBlendState(), c.blendFactor, 0xFFFFFFFFu);
 }
 
 void Renderer::StateSetDepthTestEnable(bool enable)
 {
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetDepthTestEnable(enable);
+        c.commandBuffer->SetDepthTestEnable(enable);
         return;
     }
 
-    context.depthStencilDesc.DepthEnable = enable ? TRUE : FALSE;
-    context.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
-    context.depthTestEnabled = enable ? 1 : 0;
+    c.depthStencilDesc.DepthEnable = enable ? TRUE : FALSE;
+    c.m_pDeviceContext->OMSetDepthStencilState(this->GetManagedDepthStencilState(), 0);
+    c.depthTestEnabled = enable ? 1 : 0;
 }
 
 void Renderer::StateSetAlphaTestEnable(bool enable)
 {
-    Context &context = this->getContext();
-    context.alphaTestEnabled = enable ? 1 : 0;
+    Context &c = this->getContext();
+    c.alphaTestEnabled = enable ? 1 : 0;
 
-    const float alpha[4] = {0.0f, 0.0f, 0.0f, enable ? context.alphaReference : 0.0f};
+    const float alpha[4] = {0.0f, 0.0f, 0.0f, enable ? c.alphaReference : 0.0f};
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    context.m_pDeviceContext->Map(context.cbAlphaTest, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    c.m_pDeviceContext->Map(c.cbAlphaTest, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     std::memcpy(mapped.pData, alpha, sizeof(alpha));
-    context.m_pDeviceContext->Unmap(context.cbAlphaTest, 0);
+    c.m_pDeviceContext->Unmap(c.cbAlphaTest, 0);
 }
 
 void Renderer::StateSetDepthSlopeAndBias(float slope, float bias)
 {
-    Context &context = this->getContext();
+    Context &c = this->getContext();
 
     const float scale = 65536.0f;
-    context.rasterizerDesc.DepthBias = static_cast<int>(bias * scale);
-    context.rasterizerDesc.SlopeScaledDepthBias = slope * scale;
-    context.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
+    c.rasterizerDesc.DepthBias = static_cast<int>(bias * scale);
+    c.rasterizerDesc.SlopeScaledDepthBias = slope * scale;
+    c.m_pDeviceContext->RSSetState(this->GetManagedRasterizerState());
 }
 
 void Renderer::UpdateFogState()
 {
-    Context &context = this->getContext();
-    ID3D11DeviceContext *d3d11 = context.m_pDeviceContext;
+    Context &c = this->getContext();
+    ID3D11DeviceContext *d3d11 = c.m_pDeviceContext;
 
     float fogParams[4] = {};
-    if (context.fogEnabled)
+    if (c.fogEnabled)
     {
-        if (context.fogMode == 1)
+        if (c.fogMode == 1)
         {
-            fogParams[0] = context.fogFarDistance;
-            fogParams[1] = 1.0f / (context.fogFarDistance - context.fogNearDistance);
+            fogParams[0] = c.fogFarDistance;
+            fogParams[1] = 1.0f / (c.fogFarDistance - c.fogNearDistance);
             fogParams[2] = 1.0f;
         }
         else
         {
-            fogParams[0] = context.fogDensity;
+            fogParams[0] = c.fogDensity;
             fogParams[2] = 2.0f;
         }
     }
 
-    const float fogColour[4] = {context.fogColourRed, context.fogColourGreen, context.fogColourBlue, 1.0f};
+    const float fogColour[4] = {c.fogColourRed, c.fogColourGreen, c.fogColourBlue, 1.0f};
 
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    d3d11->Map(context.cbFogParams, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    d3d11->Map(c.cbFogParams, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     std::memcpy(mapped.pData, fogParams, sizeof(fogParams));
-    d3d11->Unmap(context.cbFogParams, 0);
+    d3d11->Unmap(c.cbFogParams, 0);
 
-    d3d11->Map(context.cbFogColour, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    d3d11->Map(c.cbFogColour, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     std::memcpy(mapped.pData, fogColour, sizeof(fogColour));
-    d3d11->Unmap(context.cbFogColour, 0);
+    d3d11->Unmap(c.cbFogColour, 0);
 }
 
 void Renderer::StateSetVertexTextureUV(float u, float v)
 {
-    Context &context = this->getContext();
+    Context &c = this->getContext();
     const float texgen[4] = {u - 1.0f, v - 1.0f, 0.0f, 0.0f};
 
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    context.m_pDeviceContext->Map(context.cbVertexTexcoord, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    c.m_pDeviceContext->Map(c.cbVertexTexcoord, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     std::memcpy(mapped.pData, texgen, sizeof(texgen));
-    context.m_pDeviceContext->Unmap(context.cbVertexTexcoord, 0);
+    c.m_pDeviceContext->Unmap(c.cbVertexTexcoord, 0);
 }
 
 void Renderer::UpdateTexGenState()
 {
-    Context &context = this->getContext();
+    Context &c = this->getContext();
 
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    context.m_pDeviceContext->Map(context.cbTexGen, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    std::memcpy(mapped.pData, context.texGenMatrices, sizeof(context.texGenMatrices));
-    context.m_pDeviceContext->Unmap(context.cbTexGen, 0);
+    c.m_pDeviceContext->Map(c.cbTexGen, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    std::memcpy(mapped.pData, c.texGenMatrices, sizeof(c.texGenMatrices));
+    c.m_pDeviceContext->Unmap(c.cbTexGen, 0);
 }
 
 void Renderer::UpdateLightingState()
 {
-    Context &context = this->getContext();
-    if (!context.lightingDirty || !context.lightingEnabled)
+    Context &c = this->getContext();
+    if (!c.lightingDirty || !c.lightingEnabled)
     {
         return;
     }
 
-    if (!context.lightEnabled[0])
+    if (!c.lightEnabled[0])
     {
-        std::memset(&context.lightDirection[0], 0, sizeof(context.lightDirection[0]));
-        std::memset(&context.lightColour[0], 0, sizeof(context.lightColour[0]));
+        std::memset(&c.lightDirection[0], 0, sizeof(c.lightDirection[0]));
+        std::memset(&c.lightColour[0], 0, sizeof(c.lightColour[0]));
     }
 
-    if (!context.lightEnabled[1])
+    if (!c.lightEnabled[1])
     {
-        std::memset(&context.lightDirection[1], 0, sizeof(context.lightDirection[1]));
-        std::memset(&context.lightColour[1], 0, sizeof(context.lightColour[1]));
+        std::memset(&c.lightDirection[1], 0, sizeof(c.lightDirection[1]));
+        std::memset(&c.lightColour[1], 0, sizeof(c.lightColour[1]));
     }
 
-    const std::size_t lightingBytes = sizeof(context.lightDirection) + sizeof(context.lightColour) + sizeof(context.lightAmbientColour);
+    const std::size_t lightingBytes = sizeof(c.lightDirection) + sizeof(c.lightColour) + sizeof(c.lightAmbientColour);
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    context.m_pDeviceContext->Map(context.cbLighting, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    std::memcpy(mapped.pData, context.lightDirection, lightingBytes);
-    context.m_pDeviceContext->Unmap(context.cbLighting, 0);
+    c.m_pDeviceContext->Map(c.cbLighting, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    std::memcpy(mapped.pData, c.lightDirection, lightingBytes);
+    c.m_pDeviceContext->Unmap(c.cbLighting, 0);
 
-    context.lightingDirty = 0;
+    c.lightingDirty = 0;
 }
 
 void Renderer::StateSetLightDirection(int light, float x, float y, float z)
@@ -481,21 +481,21 @@ void Renderer::StateSetLightDirection(int light, float x, float y, float z)
         return;
     }
 
-    Context &context = this->getContext();
-    if (context.commandBuffer != nullptr && context.commandBuffer->isActive != 0)
+    Context &c = this->getContext();
+    if (c.commandBuffer != nullptr && c.commandBuffer->isActive != 0)
     {
-        context.commandBuffer->SetLightDirection(light, x, y, z);
+        c.commandBuffer->SetLightDirection(light, x, y, z);
         return;
     }
 
-    const std::uint32_t stackIndex = context.matrixStackDepth[0];
-    const DirectX::XMMATRIX &modelView = context.matrixStacks[0][stackIndex];
+    const std::uint32_t stackIndex = c.stackPos[MATRIX_MODE_MODELVIEW];
+    const DirectX::XMMATRIX &modelView = c.matrixStacks[MATRIX_MODE_MODELVIEW][stackIndex];
     const DirectX::XMVECTOR direction = DirectX::XMVectorSet(x, y, z, 0.0f);
     const DirectX::XMVECTOR transformed = DirectX::XMVector3TransformNormal(direction, modelView);
     const DirectX::XMVECTOR normalized = DirectX::XMVector3Normalize(transformed);
 
-    DirectX::XMStoreFloat4(&context.lightDirection[light], normalized);
-    context.lightingDirty = 1;
+    DirectX::XMStoreFloat4(&c.lightDirection[light], normalized);
+    c.lightingDirty = 1;
 }
 
 void Renderer::StateSetViewport(C4JRender::eViewportType viewportType)
@@ -569,14 +569,14 @@ void Renderer::StateSetEnableViewportClipPlanes(bool) {}
 
 void Renderer::StateSetTexGenCol(int col, float x, float y, float z, float w, bool eyeSpace)
 {
-    Context &context = this->getContext();
+    Context &c = this->getContext();
 
     DirectX::XMVECTOR plane = DirectX::XMVectorSet(x, y, z, w);
     if (eyeSpace)
     {
         DirectX::XMFLOAT4X4 modelView;
         std::memset(&modelView, 0, sizeof(modelView));
-        std::memcpy(&modelView, this->MatrixGet(0), sizeof(modelView));
+        std::memcpy(&modelView, this->MatrixGet(MATRIX_MODE_MODELVIEW), sizeof(modelView));
 
         DirectX::XMVECTOR determinant = DirectX::XMVectorZero();
         const DirectX::XMMATRIX inverse = DirectX::XMMatrixInverse(&determinant, DirectX::XMLoadFloat4x4(&modelView));
@@ -589,13 +589,13 @@ void Renderer::StateSetTexGenCol(int col, float x, float y, float z, float w, bo
     const int activeSet = eyeSpace ? 0 : 1;
     const int inactiveSet = eyeSpace ? 1 : 0;
 
-    float *active = reinterpret_cast<float *>(&context.texGenMatrices[activeSet]);
+    float *active = reinterpret_cast<float *>(&c.texGenMatrices[activeSet]);
     active[col + 0] = transformed.x;
     active[col + 4] = transformed.y;
     active[col + 8] = transformed.z;
     active[col + 12] = transformed.w;
 
-    float *inactive = reinterpret_cast<float *>(&context.texGenMatrices[inactiveSet]);
+    float *inactive = reinterpret_cast<float *>(&c.texGenMatrices[inactiveSet]);
     inactive[col + 0] = 0.0f;
     inactive[col + 4] = 0.0f;
     inactive[col + 8] = 0.0f;
@@ -604,9 +604,9 @@ void Renderer::StateSetTexGenCol(int col, float x, float y, float z, float w, bo
 
 void Renderer::StateSetStencil(D3D11_COMPARISON_FUNC function, uint8_t stencil_ref, uint8_t stencil_func_mask, uint8_t stencil_write_mask)
 {
-    Context &context = this->getContext();
+    Context &c = this->getContext();
 
-    D3D11_DEPTH_STENCIL_DESC desc = context.depthStencilDesc;
+    D3D11_DEPTH_STENCIL_DESC desc = c.depthStencilDesc;
     desc.StencilEnable = TRUE;
     desc.StencilReadMask = stencil_func_mask;
     desc.StencilWriteMask = stencil_write_mask;
@@ -624,15 +624,15 @@ void Renderer::StateSetStencil(D3D11_COMPARISON_FUNC function, uint8_t stencil_r
 
 void Renderer::StateSetForceLOD(int LOD)
 {
-    Context &context = this->getContext();
-    context.forcedLOD = LOD;
+    Context &c = this->getContext();
+    c.forcedLOD = LOD;
 }
 
 void Renderer::StateUpdate()
 {
-    Context &context = this->getContext();
-    this->StateSetFaceCull(context.faceCullEnabled != 0);
-    this->StateSetDepthMask(context.depthWriteEnabled != 0);
-    this->StateSetDepthTestEnable(context.depthTestEnabled != 0);
-    this->StateSetAlphaTestEnable(context.alphaTestEnabled != 0);
+    Context &c = this->getContext();
+    this->StateSetFaceCull(c.faceCullEnabled != 0);
+    this->StateSetDepthMask(c.depthWriteEnabled != 0);
+    this->StateSetDepthTestEnable(c.depthTestEnabled != 0);
+    this->StateSetAlphaTestEnable(c.alphaTestEnabled != 0);
 }

@@ -13,37 +13,42 @@ DXGI_FORMAT Renderer::textureFormats[C4JRender::MAX_TEXTURE_FORMATS] = {
 
 int Renderer::TextureCreate()
 {
-    for (int i = 0; i < 512; ++i)
+    int i = 0;
+    for (; ; i++)
     {
-        Texture &texture = m_textures[i];
-        if (!texture.allocated)
+        assert(i < 512);
+
+        if (!m_textures[i].allocated)
         {
-            texture.texture = nullptr;
-            texture.allocated = true;
-            texture.mipLevels = 1;
-            texture.samplerParams = 0;
-            return i;
+            break;
         }
     }
 
-    return -1;
+    m_textures[i].texture = nullptr;
+    m_textures[i].allocated = true;
+    m_textures[i].mipLevels = 1;
+    m_textures[i].samplerParams = 0;
+    return i;
 }
 
 void Renderer::TextureSetTextureLevels(int levels)
 {
-    const int boundTextureIndex = this->getContext().boundTextureIndex;
-    m_textures[boundTextureIndex].mipLevels = levels;
+    const int textureIdx = this->getContext().textureIdx;
+    
+    assert(levels <= MAX_MIP_LEVELS);
+
+    m_textures[textureIdx].mipLevels = levels;
 }
 
 int Renderer::TextureGetTextureLevels()
 {
-    const int boundTextureIndex = this->getContext().boundTextureIndex;
-    return m_textures[boundTextureIndex].mipLevels;
+    const int textureIdx = this->getContext().textureIdx;
+    return m_textures[textureIdx].mipLevels;
 }
 
 void Renderer::TextureSetParam(int param, int value)
 {
-    Texture &texture = m_textures[this->getContext().boundTextureIndex];
+    Texture &texture = m_textures[this->getContext().textureIdx];
 
     switch (param)
     {
@@ -87,8 +92,12 @@ void Renderer::TextureDynamicUpdateEnd() {}
 
 void Renderer::TextureData(int width, int height, void *data, int level, C4JRender::eTextureFormat format)
 {
-    Renderer::Context &context = this->getContext();
-    Texture &texture = m_textures[context.boundTextureIndex];
+    Renderer::Context &c = this->getContext();
+
+    assert(m_textures[c.textureIdx].allocated);
+    assert((level > 0) || (m_textures[c.textureIdx].texture == NULL));
+
+    Texture &texture = m_textures[c.textureIdx];
     texture.textureFormat = format;
 
     if (level == 0)
@@ -102,19 +111,24 @@ void Renderer::TextureData(int width, int height, void *data, int level, C4JRend
         desc.SampleDesc.Count = 1;
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        m_pDevice->CreateTexture2D(&desc, nullptr, &texture.texture);
-        m_pDevice->CreateShaderResourceView(texture.texture, nullptr, &texture.view);
+
+        HRESULT hr = 0;
+        hr = m_pDevice->CreateTexture2D(&desc, nullptr, &texture.texture);
+        assert(hr >= 0);
+
+        hr = m_pDevice->CreateShaderResourceView(texture.texture, nullptr, &texture.view);
+        assert(hr >= 0);
     }
 
     const UINT rowPitch = width * 4u;
     const UINT depthPitch = width * height * 4u;
-    context.m_pDeviceContext->UpdateSubresource(texture.texture, level, nullptr, data, rowPitch, depthPitch);
+    c.m_pDeviceContext->UpdateSubresource(texture.texture, level, nullptr, data, rowPitch, depthPitch);
 }
 
 void Renderer::TextureDataUpdate(int xoffset, int yoffset, int width, int height, void *data, int level)
 {
-    Renderer::Context &context = this->getContext();
-    Texture &texture = m_textures[context.boundTextureIndex];
+    Renderer::Context &c = this->getContext();
+    Texture &texture = m_textures[c.textureIdx];
 
     D3D11_BOX box = {};
     box.left = xoffset;
@@ -129,7 +143,7 @@ void Renderer::TextureDataUpdate(int xoffset, int yoffset, int width, int height
 
     const UINT rowPitch = width * 4u;
     const UINT depthPitch = width * height * 4u;
-    context.m_pDeviceContext->UpdateSubresource(texture.texture, level, &box, data, rowPitch, depthPitch);
+    c.m_pDeviceContext->UpdateSubresource(texture.texture, level, &box, data, rowPitch, depthPitch);
 }
 
 void Renderer::TextureFree(int idx)
@@ -168,16 +182,16 @@ void Renderer::TextureBind(int idx)
         textureIndex = defaultTextureIndex;
     }
 
-    Renderer::Context &context = this->getContext();
+    Renderer::Context &c = this->getContext();
 
-    if (context.commandBuffer && context.commandBuffer->isActive)
+    if (c.commandBuffer && c.commandBuffer->isActive)
     {
-        context.commandBuffer->BindTexture(textureIndex);
+        c.commandBuffer->BindTexture(textureIndex);
     }
 
-    context.boundTextureIndex = textureIndex;
+    c.textureIdx = textureIndex;
     ID3D11ShaderResourceView *const view = m_textures[textureIndex].view;
-    context.m_pDeviceContext->PSSetShaderResources(0, 1, &view);
+    c.m_pDeviceContext->PSSetShaderResources(0, 1, &view);
     this->UpdateTextureState(false);
 }
 
@@ -189,26 +203,26 @@ void Renderer::TextureBindVertex(int idx)
         textureIndex = defaultTextureIndex;
     }
 
-    Renderer::Context &context = this->getContext();
-    context.boundTextureIndex = textureIndex;
+    Renderer::Context &c = this->getContext();
+    c.textureIdx = textureIndex;
 
     ID3D11ShaderResourceView *const view = m_textures[textureIndex].view;
-    context.m_pDeviceContext->VSSetShaderResources(0, 1, &view);
+    c.m_pDeviceContext->VSSetShaderResources(0, 1, &view);
     this->UpdateTextureState(true);
 }
 
 void Renderer::UpdateTextureState(bool vertexSampler)
 {
-    Renderer::Context &context = this->getContext();
+    Renderer::Context &c = this->getContext();
     ID3D11SamplerState *sampler = this->GetManagedSamplerState();
 
     if (vertexSampler)
     {
-        context.m_pDeviceContext->VSSetSamplers(0, 1, &sampler);
+        c.m_pDeviceContext->VSSetSamplers(0, 1, &sampler);
     }
     else
     {
-        context.m_pDeviceContext->PSSetSamplers(0, 1, &sampler);
+        c.m_pDeviceContext->PSSetSamplers(0, 1, &sampler);
     }
 }
 

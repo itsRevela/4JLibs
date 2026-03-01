@@ -4,6 +4,14 @@
 #include <unordered_map>
 #include <vector>
 
+#define MATRIX_MODE_MODELVIEW       0
+#define MATRIX_MODE_MODELVIEW_UNK1  1
+#define MATRIX_MODE_MODELVIEW_UNK2  2
+#define MATRIX_MODE_MODELVIEW_CBUFF 3
+#define MATRIX_MODE_MODELVIEW_MAX   4
+
+#define STACK_TYPES    4
+#define STACK_SIZE     16
 #define MAX_MIP_LEVELS 5
 
 class Renderer
@@ -176,7 +184,7 @@ public:
         std::uint64_t GetAllocated();
         bool IsBusy();
         void AddMatrix(const float *matrix);
-        void AddVertices(unsigned int stride, unsigned int count, void *dataIn, Renderer::Context &context);
+        void AddVertices(unsigned int stride, unsigned int count, void *dataIn, Renderer::Context &c);
         void BindTexture(int idx);
         void SetColor(float r, float g, float b, float a);
         void SetDepthFunc(int func);
@@ -191,7 +199,7 @@ public:
         void SetBlendFunc(int src, int dst);
         void SetBlendFactor(unsigned int factor);
         void SetFaceCull(bool enable);
-        void Render(C4JRender::eVertexType vertexType, Renderer::Context &context, int primitiveType);
+        void Render(C4JRender::eVertexType vType, Renderer::Context &c, int primitiveType);
 
         struct Command
         {
@@ -311,16 +319,19 @@ public:
 
     struct Context
     {
+        static const unsigned int VERTEX_BUFFER_SIZE = 0x100000;
+
         Context(ID3D11Device *device, ID3D11DeviceContext *deviceContext);
+
         ID3D11DeviceContext *m_pDeviceContext;
         ID3DUserDefinedAnnotation *userAnnotation;
-        DWORD contextStateFlags;
+        DWORD annotateDepth;
         BYTE paddingAfterFlags[12];
-        DirectX::XMMATRIX matrixStacks[4][16];
-        bool matrixDirty[4];
-        DWORD matrixStackDepth[4];
-        DWORD matrixModeType;
-        DWORD boundTextureIndex;
+        DirectX::XMMATRIX matrixStacks[MATRIX_MODE_MODELVIEW_MAX][STACK_SIZE];
+        bool matrixDirty[MATRIX_MODE_MODELVIEW_MAX];
+        DWORD stackPos[MATRIX_MODE_MODELVIEW_MAX];
+        DWORD stackType;
+        DWORD textureIdx;
         BYTE faceCullEnabled;
         BYTE depthTestEnabled;
         BYTE alphaTestEnabled;
@@ -343,7 +354,7 @@ public:
         DirectX::XMFLOAT4 lightDirection[2];
         DirectX::XMFLOAT4 lightColour[2];
         DirectX::XMFLOAT4 lightAmbientColour;
-        ID3D11Buffer *cbMatrix0;
+        ID3D11Buffer *m_modelViewMatrix;
         ID3D11Buffer *cbMatrix1;
         ID3D11Buffer *cbMatrix2;
         ID3D11Buffer *cbMatrix3;

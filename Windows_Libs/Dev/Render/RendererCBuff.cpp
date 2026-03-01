@@ -70,12 +70,12 @@ void Renderer::CommandBuffer::AddMatrix(const float *matrix)
     m_commands.push_back(command);
 }
 
-void Renderer::CommandBuffer::AddVertices(unsigned int stride, unsigned int count, void *dataIn, Renderer::Context &context)
+void Renderer::CommandBuffer::AddVertices(unsigned int stride, unsigned int count, void *dataIn, Renderer::Context &c)
 {
-    if (context.matrixDirty[3])
+    if (c.matrixDirty[MATRIX_MODE_MODELVIEW_CBUFF])
     {
-        this->AddMatrix(InternalRenderManager.MatrixGet(3));
-        context.matrixDirty[3] = false;
+        this->AddMatrix(InternalRenderManager.MatrixGet(MATRIX_MODE_MODELVIEW_CBUFF));
+        c.matrixDirty[MATRIX_MODE_MODELVIEW_CBUFF] = false;
     }
 
     const std::uint64_t vertexOffset = m_vertexDataLength;
@@ -168,9 +168,9 @@ void Renderer::CommandBuffer::SetLightEnable(int light, bool enable)
 
 void Renderer::CommandBuffer::SetLightDirection(int light, float x, float y, float z)
 {
-    Renderer::Context &context = InternalRenderManager.getContext();
-    const std::uint32_t depth = context.matrixStackDepth[3];
-    const DirectX::XMMATRIX &matrix = context.matrixStacks[3][depth];
+    Renderer::Context &c = InternalRenderManager.getContext();
+    const std::uint32_t depth = c.stackPos[MATRIX_MODE_MODELVIEW_CBUFF];
+    const DirectX::XMMATRIX &matrix = c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][depth];
 
     DirectX::XMVECTOR direction = DirectX::XMVectorSet(x, y, z, 0.0f);
     direction = DirectX::XMVector3TransformNormal(direction, matrix);
@@ -242,14 +242,14 @@ void Renderer::CommandBuffer::SetFaceCull(bool enable)
     m_commands.push_back(command);
 }
 
-void Renderer::CommandBuffer::Render(C4JRender::eVertexType vertexType, Renderer::Context &context, int primitiveType)
+void Renderer::CommandBuffer::Render(C4JRender::eVertexType vType, Renderer::Context &c, int primitiveType)
 {
     if (!m_vertexBuffer)
     {
         return;
     }
 
-    int drawVertexType = vertexType;
+    int drawVertexType = vType;
     int shaderVertexType = drawVertexType;
     bool matrixOverride = false;
 
@@ -265,16 +265,16 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vertexType, Renderer
                 const float row[4] = {command.add_matrix.m_matrix[12], command.add_matrix.m_matrix[13], command.add_matrix.m_matrix[14],
                                       command.add_matrix.m_matrix[15]};
                 D3D11_MAPPED_SUBRESOURCE mappedAux0 = {};
-                context.m_pDeviceContext->Map(context.cbAux0, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedAux0);
+                c.m_pDeviceContext->Map(c.cbAux0, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedAux0);
                 std::memcpy(mappedAux0.pData, row, sizeof(row));
-                context.m_pDeviceContext->Unmap(context.cbAux0, 0);
+                c.m_pDeviceContext->Unmap(c.cbAux0, 0);
             }
             else
             {
                 D3D11_MAPPED_SUBRESOURCE mappedMatrix1 = {};
-                context.m_pDeviceContext->Map(context.cbMatrix1, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedMatrix1);
+                c.m_pDeviceContext->Map(c.cbMatrix1, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedMatrix1);
                 std::memcpy(mappedMatrix1.pData, command.add_matrix.m_matrix, sizeof(command.add_matrix.m_matrix));
-                context.m_pDeviceContext->Unmap(context.cbMatrix1, 0);
+                c.m_pDeviceContext->Unmap(c.cbMatrix1, 0);
                 matrixOverride = true;
             }
             break;
@@ -287,13 +287,13 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vertexType, Renderer
 
                 if (drawVertexType == C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1)
                 {
-                    if (context.lightingEnabled)
+                    if (c.lightingEnabled)
                     {
                         drawVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT;
                         shaderVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT;
                     }
                 }
-                else if (drawVertexType == C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT && !context.lightingEnabled)
+                else if (drawVertexType == C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT && !c.lightingEnabled)
                 {
                     drawVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1;
                     shaderVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1;
@@ -301,8 +301,8 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vertexType, Renderer
 
                 if (static_cast<DWORD>(drawVertexType) != InternalRenderManager.activeVertexType)
                 {
-                    context.m_pDeviceContext->VSSetShader(InternalRenderManager.vertexShaderTable[shaderVertexType], nullptr, 0);
-                    context.m_pDeviceContext->IASetInputLayout(InternalRenderManager.inputLayoutTable[shaderVertexType]);
+                    c.m_pDeviceContext->VSSetShader(InternalRenderManager.vertexShaderTable[shaderVertexType], nullptr, 0);
+                    c.m_pDeviceContext->IASetInputLayout(InternalRenderManager.inputLayoutTable[shaderVertexType]);
                     InternalRenderManager.activeVertexType = drawVertexType;
                 }
             }
@@ -323,57 +323,57 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vertexType, Renderer
             ID3D11Buffer *buffer = m_vertexBuffer;
             const UINT stride = InternalRenderManager.vertexStrideTable[drawVertexType];
             const UINT offset = command.add_vertices.m_vertex_index_start;
-            context.m_pDeviceContext->IASetVertexBuffers(0, 1, &buffer, &stride, &offset);
+            c.m_pDeviceContext->IASetVertexBuffers(0, 1, &buffer, &stride, &offset);
 
             if (drawIndexed)
             {
-                context.m_pDeviceContext->DrawIndexed(drawCount, 0, 0);
+                c.m_pDeviceContext->DrawIndexed(drawCount, 0, 0);
             }
             else
             {
-                context.m_pDeviceContext->Draw(drawCount, 0);
+                c.m_pDeviceContext->Draw(drawCount, 0);
             }
             break;
         }
         case COMMAND_BIND_TEXTURE:
         {
-            context.boundTextureIndex = command.bind_texture.m_texture_index;
-            ID3D11ShaderResourceView *view = InternalRenderManager.m_textures[context.boundTextureIndex].view;
-            context.m_pDeviceContext->PSSetShaderResources(0, 1, &view);
+            c.textureIdx = command.bind_texture.m_texture_index;
+            ID3D11ShaderResourceView *view = InternalRenderManager.m_textures[c.textureIdx].view;
+            c.m_pDeviceContext->PSSetShaderResources(0, 1, &view);
             InternalRenderManager.UpdateTextureState(false);
             break;
         }
         case COMMAND_SET_COLOR:
         {
             D3D11_MAPPED_SUBRESOURCE mappedColour = {};
-            context.m_pDeviceContext->Map(context.cbColour, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedColour);
+            c.m_pDeviceContext->Map(c.cbColour, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedColour);
             std::memcpy(mappedColour.pData, command.set_color.m_color, sizeof(command.set_color.m_color));
-            context.m_pDeviceContext->Unmap(context.cbColour, 0);
+            c.m_pDeviceContext->Unmap(c.cbColour, 0);
             break;
         }
         case COMMAND_SET_DEPTH_FUNC:
         {
-            context.depthStencilDesc.DepthFunc = static_cast<D3D11_COMPARISON_FUNC>(command.set_depth_func.m_depth_func);
-            context.m_pDeviceContext->OMSetDepthStencilState(InternalRenderManager.GetManagedDepthStencilState(), 0);
+            c.depthStencilDesc.DepthFunc = static_cast<D3D11_COMPARISON_FUNC>(command.set_depth_func.m_depth_func);
+            c.m_pDeviceContext->OMSetDepthStencilState(InternalRenderManager.GetManagedDepthStencilState(), 0);
             break;
         }
         case COMMAND_SET_DEPTH_MASK:
         {
-            context.depthWriteEnabled = command.set_depth_mask.m_enable ? 1 : 0;
-            context.depthStencilDesc.DepthWriteMask = command.set_depth_mask.m_enable ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
-            context.m_pDeviceContext->OMSetDepthStencilState(InternalRenderManager.GetManagedDepthStencilState(), 0);
+            c.depthWriteEnabled = command.set_depth_mask.m_enable ? 1 : 0;
+            c.depthStencilDesc.DepthWriteMask = command.set_depth_mask.m_enable ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
+            c.m_pDeviceContext->OMSetDepthStencilState(InternalRenderManager.GetManagedDepthStencilState(), 0);
             break;
         }
         case COMMAND_SET_DEPTH_TEST:
         {
-            context.depthTestEnabled = command.set_depth_test.m_enable ? 1 : 0;
-            context.depthStencilDesc.DepthEnable = command.set_depth_test.m_enable ? TRUE : FALSE;
-            context.m_pDeviceContext->OMSetDepthStencilState(InternalRenderManager.GetManagedDepthStencilState(), 0);
+            c.depthTestEnabled = command.set_depth_test.m_enable ? 1 : 0;
+            c.depthStencilDesc.DepthEnable = command.set_depth_test.m_enable ? TRUE : FALSE;
+            c.m_pDeviceContext->OMSetDepthStencilState(InternalRenderManager.GetManagedDepthStencilState(), 0);
             break;
         }
         case COMMAND_SET_LIGHTING_ENABLE:
         {
-            context.lightingEnabled = command.set_lighting_enable.m_enable ? 1 : 0;
+            c.lightingEnabled = command.set_lighting_enable.m_enable ? 1 : 0;
             break;
         }
         case COMMAND_SET_LIGHT_ENABLE:
@@ -381,8 +381,8 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vertexType, Renderer
             const int light = command.set_light_enable.m_light_index;
             if (light >= 0 && light < 2)
             {
-                context.lightEnabled[light] = command.set_light_enable.m_enable ? 1 : 0;
-                context.lightingDirty = 1;
+                c.lightEnabled[light] = command.set_light_enable.m_enable ? 1 : 0;
+                c.lightingDirty = 1;
             }
             break;
         }
@@ -391,11 +391,11 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vertexType, Renderer
             const int light = command.set_light_direction.m_light_index;
             if (light >= 0 && light < 2)
             {
-                context.lightDirection[light].x = command.set_light_direction.m_direction[0];
-                context.lightDirection[light].y = command.set_light_direction.m_direction[1];
-                context.lightDirection[light].z = command.set_light_direction.m_direction[2];
-                context.lightDirection[light].w = command.set_light_direction.m_direction[3];
-                context.lightingDirty = 1;
+                c.lightDirection[light].x = command.set_light_direction.m_direction[0];
+                c.lightDirection[light].y = command.set_light_direction.m_direction[1];
+                c.lightDirection[light].z = command.set_light_direction.m_direction[2];
+                c.lightDirection[light].w = command.set_light_direction.m_direction[3];
+                c.lightingDirty = 1;
             }
             break;
         }
@@ -404,50 +404,50 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vertexType, Renderer
             const int light = command.set_light_colour.m_light_index;
             if (light >= 0 && light < 2)
             {
-                context.lightColour[light].x = command.set_light_colour.m_color[0];
-                context.lightColour[light].y = command.set_light_colour.m_color[1];
-                context.lightColour[light].z = command.set_light_colour.m_color[2];
-                context.lightColour[light].w = 1.0f;
-                context.lightingDirty = 1;
+                c.lightColour[light].x = command.set_light_colour.m_color[0];
+                c.lightColour[light].y = command.set_light_colour.m_color[1];
+                c.lightColour[light].z = command.set_light_colour.m_color[2];
+                c.lightColour[light].w = 1.0f;
+                c.lightingDirty = 1;
             }
             break;
         }
         case COMMAND_SET_LIGHT_AMBIENT_COLOUR:
         {
-            context.lightAmbientColour.x = command.set_light_ambient_colour.m_color[0];
-            context.lightAmbientColour.y = command.set_light_ambient_colour.m_color[1];
-            context.lightAmbientColour.z = command.set_light_ambient_colour.m_color[2];
-            context.lightAmbientColour.w = 1.0f;
-            context.lightingDirty = 1;
+            c.lightAmbientColour.x = command.set_light_ambient_colour.m_color[0];
+            c.lightAmbientColour.y = command.set_light_ambient_colour.m_color[1];
+            c.lightAmbientColour.z = command.set_light_ambient_colour.m_color[2];
+            c.lightAmbientColour.w = 1.0f;
+            c.lightingDirty = 1;
             break;
         }
         case COMMAND_SET_BLEND_ENABLE:
         {
-            context.blendDesc.RenderTarget[0].BlendEnable = command.set_blend_enable.m_enable ? TRUE : FALSE;
+            c.blendDesc.RenderTarget[0].BlendEnable = command.set_blend_enable.m_enable ? TRUE : FALSE;
             break;
         }
         case COMMAND_SET_BLEND_FUNC:
         {
-            context.blendDesc.RenderTarget[0].SrcBlend = static_cast<D3D11_BLEND>(command.set_blend_func.m_src);
-            context.blendDesc.RenderTarget[0].DestBlend = static_cast<D3D11_BLEND>(command.set_blend_func.m_dst);
-            context.m_pDeviceContext->OMSetBlendState(InternalRenderManager.GetManagedBlendState(), context.blendFactor, 0xFFFFFFFFu);
+            c.blendDesc.RenderTarget[0].SrcBlend = static_cast<D3D11_BLEND>(command.set_blend_func.m_src);
+            c.blendDesc.RenderTarget[0].DestBlend = static_cast<D3D11_BLEND>(command.set_blend_func.m_dst);
+            c.m_pDeviceContext->OMSetBlendState(InternalRenderManager.GetManagedBlendState(), c.blendFactor, 0xFFFFFFFFu);
             break;
         }
         case COMMAND_SET_BLEND_FACTOR:
         {
             const unsigned int factor = command.set_blend_factor.m_blend_factor;
-            context.blendFactor[0] = float((factor >> 0) & 0xFFu) / 255.0f;
-            context.blendFactor[1] = float((factor >> 8) & 0xFFu) / 255.0f;
-            context.blendFactor[2] = float((factor >> 16) & 0xFFu) / 255.0f;
-            context.blendFactor[3] = float((factor >> 24) & 0xFFu) / 255.0f;
-            context.m_pDeviceContext->OMSetBlendState(InternalRenderManager.GetManagedBlendState(), context.blendFactor, 0xFFFFFFFFu);
+            c.blendFactor[0] = float((factor >> 0) & 0xFFu) / 255.0f;
+            c.blendFactor[1] = float((factor >> 8) & 0xFFu) / 255.0f;
+            c.blendFactor[2] = float((factor >> 16) & 0xFFu) / 255.0f;
+            c.blendFactor[3] = float((factor >> 24) & 0xFFu) / 255.0f;
+            c.m_pDeviceContext->OMSetBlendState(InternalRenderManager.GetManagedBlendState(), c.blendFactor, 0xFFFFFFFFu);
             break;
         }
         case COMMAND_SET_FACE_CULL:
         {
-            context.rasterizerDesc.CullMode = command.set_face_cull.m_enable ? D3D11_CULL_BACK : D3D11_CULL_NONE;
-            context.m_pDeviceContext->RSSetState(InternalRenderManager.GetManagedRasterizerState());
-            context.faceCullEnabled = command.set_face_cull.m_enable ? 1 : 0;
+            c.rasterizerDesc.CullMode = command.set_face_cull.m_enable ? D3D11_CULL_BACK : D3D11_CULL_NONE;
+            c.m_pDeviceContext->RSSetState(InternalRenderManager.GetManagedRasterizerState());
+            c.faceCullEnabled = command.set_face_cull.m_enable ? 1 : 0;
             break;
         }
         default:
@@ -459,9 +459,9 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vertexType, Renderer
     {
         const DirectX::XMMATRIX identity = DirectX::XMMatrixIdentity();
         D3D11_MAPPED_SUBRESOURCE mappedIdentity = {};
-        context.m_pDeviceContext->Map(context.cbMatrix1, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedIdentity);
+        c.m_pDeviceContext->Map(c.cbMatrix1, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedIdentity);
         std::memcpy(mappedIdentity.pData, &identity, sizeof(identity));
-        context.m_pDeviceContext->Unmap(context.cbMatrix1, 0);
+        c.m_pDeviceContext->Unmap(c.cbMatrix1, 0);
     }
 }
 
@@ -474,37 +474,37 @@ bool Renderer::CBuffCall(int index, bool full)
     const int internalIndex = externalToInternal[index];
     if (internalIndex >= 0)
     {
-        Renderer::Context &context = this->getContext();
+        Renderer::Context &c = this->getContext();
         const std::uint8_t vertexType = static_cast<std::uint8_t *>(reservedRendererPtr6)[internalIndex];
         const std::uint8_t primitiveType = reinterpret_cast<std::uint8_t *>(reservedRendererPtr1)[internalIndex];
 
         if (full)
         {
-            if (context.matrixDirty[0])
+            if (c.matrixDirty[MATRIX_MODE_MODELVIEW])
             {
                 D3D11_MAPPED_SUBRESOURCE mappedMatrix0 = {};
-                context.m_pDeviceContext->Map(context.cbMatrix0, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedMatrix0);
-                std::memcpy(mappedMatrix0.pData, this->MatrixGet(0), sizeof(DirectX::XMMATRIX));
-                context.m_pDeviceContext->Unmap(context.cbMatrix0, 0);
-                context.matrixDirty[0] = false;
+                c.m_pDeviceContext->Map(c.m_modelViewMatrix, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedMatrix0);
+                std::memcpy(mappedMatrix0.pData, this->MatrixGet(MATRIX_MODE_MODELVIEW), sizeof(DirectX::XMMATRIX));
+                c.m_pDeviceContext->Unmap(c.m_modelViewMatrix, 0);
+                c.matrixDirty[MATRIX_MODE_MODELVIEW] = false;
             }
 
-            if (context.matrixDirty[1])
+            if (c.matrixDirty[MATRIX_MODE_MODELVIEW_UNK1])
             {
                 D3D11_MAPPED_SUBRESOURCE mappedMatrix2 = {};
-                context.m_pDeviceContext->Map(context.cbMatrix2, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedMatrix2);
-                std::memcpy(mappedMatrix2.pData, this->MatrixGet(1), sizeof(DirectX::XMMATRIX));
-                context.m_pDeviceContext->Unmap(context.cbMatrix2, 0);
-                context.matrixDirty[1] = false;
+                c.m_pDeviceContext->Map(c.cbMatrix2, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedMatrix2);
+                std::memcpy(mappedMatrix2.pData, this->MatrixGet(MATRIX_MODE_MODELVIEW_UNK1), sizeof(DirectX::XMMATRIX));
+                c.m_pDeviceContext->Unmap(c.cbMatrix2, 0);
+                c.matrixDirty[MATRIX_MODE_MODELVIEW_UNK1] = false;
             }
 
-            if (context.matrixDirty[2])
+            if (c.matrixDirty[MATRIX_MODE_MODELVIEW_UNK2])
             {
                 D3D11_MAPPED_SUBRESOURCE mappedMatrix3 = {};
-                context.m_pDeviceContext->Map(context.cbMatrix3, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedMatrix3);
-                std::memcpy(mappedMatrix3.pData, this->MatrixGet(2), sizeof(DirectX::XMMATRIX));
-                context.m_pDeviceContext->Unmap(context.cbMatrix3, 0);
-                context.matrixDirty[2] = false;
+                c.m_pDeviceContext->Map(c.cbMatrix3, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedMatrix3);
+                std::memcpy(mappedMatrix3.pData, this->MatrixGet(MATRIX_MODE_MODELVIEW_UNK2), sizeof(DirectX::XMMATRIX));
+                c.m_pDeviceContext->Unmap(c.cbMatrix3, 0);
+                c.matrixDirty[MATRIX_MODE_MODELVIEW_UNK2] = false;
             }
 
             this->UpdateFogState();
@@ -514,29 +514,29 @@ bool Renderer::CBuffCall(int index, bool full)
 
             if (vertexType != activeVertexType)
             {
-                context.m_pDeviceContext->VSSetShader(vertexShaderTable[vertexType], nullptr, 0);
-                context.m_pDeviceContext->IASetInputLayout(inputLayoutTable[vertexType]);
+                c.m_pDeviceContext->VSSetShader(vertexShaderTable[vertexType], nullptr, 0);
+                c.m_pDeviceContext->IASetInputLayout(inputLayoutTable[vertexType]);
                 activeVertexType = vertexType;
             }
 
             int pixelType = 0;
-            if (static_cast<int>(context.forcedLOD) > -1)
+            if (static_cast<int>(c.forcedLOD) > -1)
             {
-                const float forcedLod[4] = {static_cast<float>(static_cast<int>(context.forcedLOD)), 0.0f, 0.0f, 0.0f};
+                const float forcedLod[4] = {static_cast<float>(static_cast<int>(c.forcedLOD)), 0.0f, 0.0f, 0.0f};
                 D3D11_MAPPED_SUBRESOURCE mappedAux4 = {};
-                context.m_pDeviceContext->Map(context.cbAux4, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedAux4);
+                c.m_pDeviceContext->Map(c.cbAux4, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedAux4);
                 std::memcpy(mappedAux4.pData, forcedLod, sizeof(forcedLod));
-                context.m_pDeviceContext->Unmap(context.cbAux4, 0);
+                c.m_pDeviceContext->Unmap(c.cbAux4, 0);
                 pixelType = C4JRender::PIXEL_SHADER_TYPE_FORCELOD;
             }
 
             if (static_cast<DWORD>(pixelType) != activePixelType)
             {
-                context.m_pDeviceContext->PSSetShader(pixelShaderTable[pixelType], nullptr, 0);
+                c.m_pDeviceContext->PSSetShader(pixelShaderTable[pixelType], nullptr, 0);
                 activePixelType = pixelType;
             }
 
-            context.m_pDeviceContext->IASetPrimitiveTopology(m_Topologies[primitiveType]);
+            c.m_pDeviceContext->IASetPrimitiveTopology(m_Topologies[primitiveType]);
 
             ID3D11Buffer *indexBuffer = nullptr;
             if (primitiveType == C4JRender::PRIMITIVE_TYPE_QUAD_LIST)
@@ -548,17 +548,17 @@ bool Renderer::CBuffCall(int index, bool full)
                 indexBuffer = fanIndexBuffer;
             }
 
-            context.m_pDeviceContext->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R16_UINT, 0);
+            c.m_pDeviceContext->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R16_UINT, 0);
         }
 
         Renderer::CommandBuffer *commandBuffer = static_cast<Renderer::CommandBuffer **>(reservedRendererPtr3)[internalIndex];
-        commandBuffer->Render(static_cast<C4JRender::eVertexType>(vertexType), context, primitiveType);
+        commandBuffer->Render(static_cast<C4JRender::eVertexType>(vertexType), c, primitiveType);
 
         if (full)
         {
             this->MultWithStack(static_cast<DirectX::XMMATRIX *>(reservedRendererPtr4)[internalIndex]);
-            context.matrixStacks[3][0] = DirectX::XMMatrixIdentity();
-            context.matrixDirty[3] = true;
+            c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][0] = DirectX::XMMatrixIdentity();
+            c.matrixDirty[MATRIX_MODE_MODELVIEW_CBUFF] = true;
         }
 
         result = true;
@@ -598,6 +598,8 @@ int Renderer::CBuffCreate(int count)
         int end = first + count;
         while (true)
         {
+            assert(first < kMaxExternalCBuffers);
+
             int cursor = probe;
             while (cursor < end && cursor < kMaxExternalCBuffers && externalToInternal[cursor] == static_cast<std::int16_t>(-1))
             {
@@ -644,14 +646,14 @@ int Renderer::CBuffCreate(int count)
 
 void Renderer::CBuffDeferredModeEnd()
 {
-    Renderer::Context &context = this->getContext();
-    if (!context.deferredModeEnabled)
+    Renderer::Context &c = this->getContext();
+    if (!c.deferredModeEnabled)
     {
         return;
     }
 
     EnterCriticalSection(&rtl_critical_section100);
-    context.deferredModeEnabled = 0;
+    c.deferredModeEnabled = 0;
 
     std::int16_t *externalToInternal = static_cast<std::int16_t *>(reservedRendererPtr2);
     int *internalToExternal = static_cast<int *>(reservedRendererPtr5);
@@ -660,7 +662,7 @@ void Renderer::CBuffDeferredModeEnd()
     Renderer::CommandBuffer **internalBuffers = static_cast<Renderer::CommandBuffer **>(reservedRendererPtr3);
     DirectX::XMMATRIX *internalMatrices = static_cast<DirectX::XMMATRIX *>(reservedRendererPtr4);
 
-    for (std::vector<Renderer::DeferredCBuff>::const_iterator it = context.deferredBuffers.begin(); it != context.deferredBuffers.end(); ++it)
+    for (std::vector<Renderer::DeferredCBuff>::const_iterator it = c.deferredBuffers.begin(); it != c.deferredBuffers.end(); ++it)
     {
         const Renderer::DeferredCBuff &deferred = *it;
         const int existingIndex = externalToInternal[deferred.m_vertex_index];
@@ -685,7 +687,7 @@ void Renderer::CBuffDeferredModeEnd()
         internalMatrices[internalSlot] = deferred.m_matrix;
     }
 
-    context.deferredBuffers.clear();
+    c.deferredBuffers.clear();
     LeaveCriticalSection(&rtl_critical_section100);
 }
 
@@ -716,18 +718,22 @@ void Renderer::CBuffDelete(int first, int count)
 
 void Renderer::CBuffEnd()
 {
-    Renderer::Context &context = this->getContext();
+    Renderer::Context &c = this->getContext();
+
+    assert(c.stackType == MATRIX_MODE_MODELVIEW_CBUFF);
+    assert(c.stackPos[MATRIX_MODE_MODELVIEW_CBUFF] == 0);
+
     EnterCriticalSection(&rtl_critical_section100);
 
-    if (context.deferredModeEnabled)
+    if (c.deferredModeEnabled)
     {
         Renderer::DeferredCBuff deferred;
-        deferred.m_command_buf = context.commandBuffer;
-        deferred.m_vertex_index = context.recordingBufferIndex;
-        deferred.m_vertex_type = context.recordingVertexType;
-        deferred.m_primitive_type = context.recordingPrimitiveType;
-        deferred.m_matrix = context.matrixStacks[3][0];
-        context.deferredBuffers.push_back(deferred);
+        deferred.m_command_buf = c.commandBuffer;
+        deferred.m_vertex_index = c.recordingBufferIndex;
+        deferred.m_vertex_type = c.recordingVertexType;
+        deferred.m_primitive_type = c.recordingPrimitiveType;
+        deferred.m_matrix = c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][0];
+        c.deferredBuffers.push_back(deferred);
     }
     else
     {
@@ -738,7 +744,7 @@ void Renderer::CBuffEnd()
         Renderer::CommandBuffer **internalBuffers = static_cast<Renderer::CommandBuffer **>(reservedRendererPtr3);
         DirectX::XMMATRIX *internalMatrices = static_cast<DirectX::XMMATRIX *>(reservedRendererPtr4);
 
-        const int existingIndex = externalToInternal[context.recordingBufferIndex];
+        const int existingIndex = externalToInternal[c.recordingBufferIndex];
         if (existingIndex >= 0)
         {
             this->DeleteInternalBuffer(existingIndex);
@@ -752,17 +758,17 @@ void Renderer::CBuffEnd()
         const int internalSlot = reservedRendererDword2;
         ++reservedRendererDword2;
 
-        externalToInternal[context.recordingBufferIndex] = static_cast<std::int16_t>(internalSlot);
-        internalToExternal[internalSlot] = context.recordingBufferIndex;
-        internalVertexTypes[internalSlot] = static_cast<std::uint8_t>(context.recordingVertexType);
-        internalPrimitiveTypes[internalSlot] = static_cast<std::uint8_t>(context.recordingPrimitiveType);
-        internalBuffers[internalSlot] = context.commandBuffer;
-        internalMatrices[internalSlot] = context.matrixStacks[3][0];
+        externalToInternal[c.recordingBufferIndex] = static_cast<std::int16_t>(internalSlot);
+        internalToExternal[internalSlot] = c.recordingBufferIndex;
+        internalVertexTypes[internalSlot] = static_cast<std::uint8_t>(c.recordingVertexType);
+        internalPrimitiveTypes[internalSlot] = static_cast<std::uint8_t>(c.recordingPrimitiveType);
+        internalBuffers[internalSlot] = c.commandBuffer;
+        internalMatrices[internalSlot] = c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][0];
     }
 
-    context.matrixModeType = 0;
-    context.commandBuffer->EndRecording(m_pDevice);
-    context.commandBuffer = nullptr;
+    c.stackType = MATRIX_MODE_MODELVIEW;
+    c.commandBuffer->EndRecording(m_pDevice);
+    c.commandBuffer = nullptr;
 
     LeaveCriticalSection(&rtl_critical_section100);
 }
@@ -792,13 +798,16 @@ int Renderer::CBuffSize(int index)
 
 void Renderer::CBuffStart(int index, bool full)
 {
-    Renderer::Context &context = this->getContext();
-    context.commandBuffer = new (std::nothrow) Renderer::CommandBuffer(full);
-    context.recordingBufferIndex = index;
-    context.matrixModeType = 3;
-    context.matrixStackDepth[3] = 0;
-    context.matrixStacks[3][0] = DirectX::XMMatrixIdentity();
-    context.matrixDirty[3] = true;
+    Renderer::Context &c = this->getContext();
+    c.commandBuffer = new (std::nothrow) Renderer::CommandBuffer(full);
+    c.recordingBufferIndex = index;
+
+    assert(c.stackType == MATRIX_MODE_MODELVIEW);
+
+    c.stackType = MATRIX_MODE_MODELVIEW_CBUFF;
+    c.stackPos[MATRIX_MODE_MODELVIEW_CBUFF] = 0;
+    c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][0] = DirectX::XMMatrixIdentity();
+    c.matrixDirty[MATRIX_MODE_MODELVIEW_CBUFF] = true;
 }
 
 void Renderer::CBuffTick()
