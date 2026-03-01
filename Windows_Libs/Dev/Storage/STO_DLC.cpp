@@ -9,9 +9,10 @@ XCONTENT_DATA& CDLC::GetDLC(DWORD dw)
 
 CDLC::CDLC(void) : m_vInstalledDLCs(), m_szMountPath(), m_vDLCDriveMappings()
 {
-	m_iHasNewInstalledDLCs = 0;
+	m_iHasNewInstalledDLCs = false;
 	dword0 = 0;
 	dwordC0 = 0;
+	m_iHasNewMountedDLCs = false; // @Patoke fix
 
 	ZeroMemory(m_szDLCProductCode, sizeof(m_szDLCProductCode));
 	ZeroMemory(m_szProductUpgradeKey, sizeof(m_szProductUpgradeKey));

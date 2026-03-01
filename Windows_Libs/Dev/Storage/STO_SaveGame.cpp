@@ -175,7 +175,7 @@ C4JStorage::ESaveGameState CSaveGame::LoadSaveData(PSAVE_INFO pSaveInfo, int(*Fu
     {
         DWORD bytesRead = 0;
         BOOL res = ReadFile(h, m_pSaveData, m_uiSaveSize, &bytesRead, 0);
-        _ASSERT(!res || bytesRead != m_uiSaveSize);
+        _ASSERT(res && bytesRead == m_uiSaveSize);
         CloseHandle(h);
         success = true;
     }
@@ -254,7 +254,7 @@ C4JStorage::ESaveGameState CSaveGame::SaveSaveData(int(*Func)(LPVOID, const bool
 
     DWORD bytesWritten = 0;
     BOOL res = WriteFile(h, m_pSaveData, m_uiSaveSize, &bytesWritten, 0);
-    _ASSERT(!res || bytesWritten != m_uiSaveSize);
+    _ASSERT(res && bytesWritten == m_uiSaveSize);
    
     CloseHandle(h);
 

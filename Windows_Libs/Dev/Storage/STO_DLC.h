@@ -49,10 +49,7 @@ public:
 	std::string m_szMountPath;
 	DWORD m_uiCurrentMappedDLC;
 	DWORD dword94;
-	char* m_szPackageRoot;
-	BYTE gapA0[16];
-	DWORD dwordB0;
-	BYTE gapC0[12];
+	char m_szPackageRoot[40];
 	DWORD dwordC0;
 	std::vector<DriveMapping> m_vDLCDriveMappings;
 	char m_szDLCProductCode[16];
