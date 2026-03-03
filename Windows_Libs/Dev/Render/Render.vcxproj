@@ -357,6 +357,20 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="shaders\main_PS.hlsl">
+      <FileType>Document</FileType>
+    </Text>
+    <Text Include="shaders\main_VS.hlsl">
+      <FileType>Document</FileType>
+    </Text>
+    <Text Include="shaders\screen_PS.hlsl">
+      <FileType>Document</FileType>
+    </Text>
+    <Text Include="shaders\screen_VS.hlsl">
+      <FileType>Document</FileType>
+    </Text>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

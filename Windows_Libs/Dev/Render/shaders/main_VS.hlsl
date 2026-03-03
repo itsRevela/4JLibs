@@ -132,72 +132,64 @@ VS_OUTPUT main(VS_INPUT input)
 {
     VS_OUTPUT output;
     
-#ifndef COMPRESSED
+    #ifndef COMPRESSED
+    
+    float4 skinnedPos = mul(matWorldView2, input.position);
+    float4 cameraPos = mul(matWorldView, skinnedPos);
+    output.position = mul(matProjection, cameraPos);
 
-    float4 skinnedPosition = mul(matWorldView2, input.position);
-    float4 cameraSpacePos = mul(matWorldView, skinnedPosition);
-    output.position = mul(matProjection, cameraSpacePos);
-
-    float2 lightMapUV = float2((int2) input.lightMapCoord) * 0.00390625f;
-    lightMapUV = frac(max(vecUVT2.xy, lightMapUV));
-    float4 lightMapSample = light_texture.SampleLevel(light_sampler_s, lightMapUV, 0);
-    lightMapSample.w = 1.0f;
-
-#ifndef LIGHTING
-    output.colour.xyzw = input.colour.wzyx * lightMapSample;
-#endif
-
-#ifdef LIGHTING
+    float2 lightUV = frac(max(vecUVT2.xy, float2(input.lightMapCoord) * 0.00390625f));
+    float4 lightSample = light_texture.SampleLevel(light_sampler_s, lightUV, 0);
+    lightSample.w = 1.0f;
+    
+    #ifdef LIGHTING
     float3 skinNormal = mul((float3x3)matWorldView2, input.normal);
     float3 viewNormal = normalize(mul((float3x3)matWorldView, skinNormal));
 
-    float d0 = max(0.0f, dot(vecLight0, viewNormal));
-    float d1 = max(0.0f, dot(vecLight1, viewNormal));
-    float4 litColour = saturate(vecLightAmbientCol + d0 * vecLight0Col + d1 * vecLight1Col);
+    float diffuse0 = max(0.0f, dot(vecLight0, viewNormal));
+    float diffuse1 = max(0.0f, dot(vecLight1, viewNormal));
+    float4 litColour = saturate(vecLightAmbientCol + diffuse0 * vecLight0Col + diffuse1 * vecLight1Col);
 
-    lightMapUV = float2((int2)input.lightMapCoord) * 0.00390625f;
-    lightMapUV = frac(max(vecUVT2.xy, lightMapUV));
-    lightMapSample = light_texture.SampleLevel(light_sampler_s, lightMapUV, 0);
-
-    output.colour.xyz = litColour.xyz * (input.colour.wzy * lightMapSample.xyz);
+    output.colour.xyz = litColour.xyz * (input.colour.wzy * lightSample.xyz);
     output.colour.w = litColour.w;
-#endif
+    #else
+    output.colour = input.colour.wzyx * lightSample;
+    #endif
 
-#ifdef TEXGEN
-    float4 texGenCoords = mul(matTexGenView, cameraSpacePos) + mul(matTexGenObj, input.position);
-    output.texCoord.x = dot(matUV[0], texGenCoords);
-    output.texCoord.y = dot(matUV[1], texGenCoords);
-    output.texCoord.w = dot(matUV[3], texGenCoords);
-#else
+    #ifdef TEXGEN
+    float4 texGenCoords = mul(matTexGenView, cameraPos) + mul(matTexGenObj, input.position);
+    output.texCoord.xy = float2(dot(matUV[0], texGenCoords), dot(matUV[1], texGenCoords));
+    output.texCoord.w  = dot(matUV[3], texGenCoords);
+    #else
     output.texCoord.xy = float2(dot(matUV[0], input.texCoord), dot(matUV[1], input.texCoord));
     output.texCoord.w = 1.0f;
-#endif
+    #endif
 
-    output.texCoord.z = CalcFogFactor(vecFog, cameraSpacePos.z);
-    
-#else // COMPRESSED
+    output.texCoord.z = CalcFogFactor(vecFog, cameraPos.z);
+
+    #else // COMPRESSED
 
     float4 pos;
     pos.xyz = float3((int3)input.position.xyz) * 0.0009765625f + vecWV2Trans.xyz;
     pos.w = 1.0f;
 
     int packedColor = (int)input.position.w + 32768;
-    float3 colour = frac(packedColor * float3(1.52587891e-05f, 0.00048828125f, 0.03125f));
+    float3 color = frac(packedColor * float3(1.52587891e-05f, 0.00048828125f, 0.03125f));
 
-    float4 cameraSpacePos = mul(matWorldView, pos);
-    output.position = mul(matProjection, cameraSpacePos);
+    float4 cameraPos = mul(matWorldView, pos);
+    output.position = mul(matProjection, cameraPos);
 
     float4 uvs = float4((int4)input.texCoord.zwxy) * float4(0.00390625f, 0.00390625f, 0.000122070312f, 0.000122070312f);
-    float2 lightMapUV = frac(max(vecUVT2.xy, uvs.xy));
-    float4 lightMapSample = light_texture.SampleLevel(light_sampler_s, lightMapUV, 0);
+    float2 lightUV = frac(max(vecUVT2.xy, uvs.xy));
+    float4 lightSample = light_texture.SampleLevel(light_sampler_s, lightUV, 0);
 
-    output.colour.xyz = lightMapSample.xyz * colour;
+    output.colour.xyz = lightSample.xyz * color;
     output.colour.w = 1.0f;
     output.texCoord.xy = uvs.zw;
-    output.texCoord.z = CalcFogFactor(vecFog, cameraSpacePos.z);
+    output.texCoord.z = CalcFogFactor(vecFog, cameraPos.z);
     output.texCoord.w = 1.0f;
 
-#endif
+    #endif
 
     return output;
 }
