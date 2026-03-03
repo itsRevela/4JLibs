@@ -27,11 +27,20 @@ SOFTWARE.
 // requires linking Minecraft.Client against Ws2_32.lib
 // stats are available at http://127.0.0.1:1338/
 
-//#define ENABLE_PROFILING
+#define ENABLE_PROFILING
 
 #ifdef ENABLE_PROFILING
 #include "microprofile/microprofile.h"
+#define PROFILER_INIT()                                                                                                                              \
+    do                                                                                                                                               \
+    {                                                                                                                                                \
+        MicroProfileOnThreadCreate("MainRenderThread");                                                                                              \
+        MicroProfileSetEnableAllGroups(true);                                                                                                        \
+    } while (0)
+#define PROFILER_FLIP()                    MicroProfileFlip(NULL);
 #define PROFILER_SCOPE(group, name, color) MICROPROFILE_SCOPEI(group, name, color);
 #else
+#define PROFILER_INIT()                    ((void)0);
+#define PROFILER_FLIP()                    ((void)0);
 #define PROFILER_SCOPE(group, name, color) ((void)0);
 #endif
