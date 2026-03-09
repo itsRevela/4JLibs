@@ -31,7 +31,7 @@ Renderer InternalRenderManager;
 DWORD Renderer::tlsIdx = TlsAlloc();
 _RTL_CRITICAL_SECTION Renderer::totalAllocCS = {};
 
-DWORD Renderer::s_auiWidths[]  = { 1920, 512, 256, 128, 64, 0 };
+DWORD Renderer::s_auiWidths[]  = { 1920, 512, 256, 128, 64 };
 DWORD Renderer::s_auiHeights[] = { 1080, 512, 256, 128, 64 };
 int Renderer::totalAlloc = 0;
 const float Renderer::PI = 3.14159274f;
@@ -265,7 +265,7 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
 
     // @Patoke fix: bind render target to a proper backbuffer texture
     ID3D11Resource *actualBackBuffer = NULL;
-    renderTargetView->GetResource(&actualBackBuffer);
+    mainRenderTargetView->GetResource(&actualBackBuffer);
 
     // copy the backbuffer contents
     c.m_pDeviceContext->CopyResource(m_backBufferTexture, actualBackBuffer);
@@ -423,7 +423,7 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     ID3D11ShaderResourceView *nullSRV[1] = {nullptr};
     c.m_pDeviceContext->PSSetShaderResources(0, 1, nullSRV);
 
-    for (UINT i = 0; i < MAX_MIP_LEVELS - 1; ++i)
+    for (UINT i = 0; i < NUM_THUMBNAIL_DOWNSAMPLES; ++i)
     {
         D3D11_VIEWPORT viewport = {};
         viewport.TopLeftX = 0.0f;
@@ -435,10 +435,10 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
 
         c.m_pDeviceContext->PSSetShaderResources(0, 1, nullSRV);
 
-        c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetViews[i], NULL);
+        c.m_pDeviceContext->OMSetRenderTargets(1, &downSampleRenderTargetViews[i], NULL);
         c.m_pDeviceContext->RSSetViewports(1, &viewport);
 
-        ID3D11ShaderResourceView *inputTexture = (i == 0) ? renderTargetShaderResourceView : renderTargetShaderResourceViews[i - 1];
+        ID3D11ShaderResourceView *inputTexture = (i == 0) ? mainShaderResourceView : downSampleShaderResourceViews[i - 1];
         c.m_pDeviceContext->PSSetShaderResources(0, 1, &inputTexture);
         c.m_pDeviceContext->PSSetSamplers(0, 1, &samplerState);
         c.m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
@@ -475,7 +475,7 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     }
 
     D3D11_TEXTURE2D_DESC texDesc = {};
-    renderTargetTextures[MAX_MIP_LEVELS - 2]->GetDesc(&texDesc);
+    downSampleTextures[THUMBNAIL_DOWNSAMPLE_QUALITY_3]->GetDesc(&texDesc);
     texDesc.Usage = D3D11_USAGE_STAGING;
     texDesc.BindFlags = 0;
     texDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
@@ -487,7 +487,7 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
 
     if (stagingTexture)
     {
-        c.m_pDeviceContext->CopyResource(stagingTexture, renderTargetTextures[MAX_MIP_LEVELS - 2]);
+        c.m_pDeviceContext->CopyResource(stagingTexture, downSampleTextures[THUMBNAIL_DOWNSAMPLE_QUALITY_3]);
 
         D3D11_MAPPED_SUBRESOURCE mapped = {};
         if (SUCCEEDED(c.m_pDeviceContext->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mapped)))
@@ -538,7 +538,7 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     viewport.MaxDepth = 1.0f;
 
     c.m_pDeviceContext->RSSetViewports(1, &viewport);
-    c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
+    c.m_pDeviceContext->OMSetRenderTargets(1, &mainRenderTargetView, depthStencilView);
 
     activeVertexType = -1;
     activePixelType = -1;
@@ -680,27 +680,27 @@ void Renderer::Initialise(ID3D11Device *pDevice, IDXGISwapChain *pSwapChain)
 
     PROFILER_INIT();
 
-    m_commandHandleToIndex = new int16_t[NUM_COMMAND_HANDLES];
+    m_vertexIdxToBufferIdx = new int16_t[NUM_COMMAND_HANDLES];
     m_commandBuffers = new CommandBuffer *[MAX_COMMAND_BUFFERS];
     m_commandMatrices = new DirectX::XMMATRIX[MAX_COMMAND_BUFFERS];
-    m_commandIndexToHandle = new int[MAX_COMMAND_BUFFERS];
+    m_bufferIdxToVertexIdx = new int[MAX_COMMAND_BUFFERS];
     m_commandPrimitiveTypes = new uint8_t[MAX_COMMAND_BUFFERS];
     m_commandVertexTypes = new uint8_t[MAX_COMMAND_BUFFERS];
 
-    std::memset(m_commandHandleToIndex, 0xFF, 0x1000000u);
-    std::memset(m_commandBuffers, 0, 0xFA00u);
-    std::memset(m_commandIndexToHandle, 0, 0xFA00u);
-    std::memset(m_commandPrimitiveTypes, 0, 0x3E80u);
-    std::memset(m_commandVertexTypes, 0, 0x3E80u);
+    std::memset(m_vertexIdxToBufferIdx, 0xFF, NUM_COMMAND_HANDLES * sizeof(int16_t));
+    std::memset(m_commandBuffers, 0, MAX_COMMAND_BUFFERS * sizeof(CommandBuffer *));
+    std::memset(m_bufferIdxToVertexIdx, 0, MAX_COMMAND_BUFFERS * sizeof(int));
+    std::memset(m_commandPrimitiveTypes, 0, MAX_COMMAND_BUFFERS * sizeof(uint8_t));
+    std::memset(m_commandVertexTypes, 0, MAX_COMMAND_BUFFERS * sizeof(uint8_t));
 
-    reservedRendererDword3 = 0;
+    m_numBuffersToDeallocate = 0;
     m_bShouldScreenGrabNextFrame = false;
 
     SetupShaders();
     const float clearColour[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     SetClearColour(clearColour);
 
-    m_pDeviceContext->OMGetRenderTargets(1, &renderTargetView, &depthStencilView);
+    m_pDeviceContext->OMGetRenderTargets(1, &mainRenderTargetView, &depthStencilView);
 
     D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
     std::memset(&rtvDesc, 0, sizeof(rtvDesc));
@@ -717,7 +717,7 @@ void Renderer::Initialise(ID3D11Device *pDevice, IDXGISwapChain *pSwapChain)
 
     ID3D11Resource *backBufferResource = NULL;
     ID3D11Texture2D *backBufferTexture = NULL;
-    renderTargetView->GetResource(&backBufferResource);
+    mainRenderTargetView->GetResource(&backBufferResource);
     backBufferResource->QueryInterface(IID_PPV_ARGS(&backBufferTexture));
 
     D3D11_TEXTURE2D_DESC backDesc = {};
@@ -735,9 +735,9 @@ void Renderer::Initialise(ID3D11Device *pDevice, IDXGISwapChain *pSwapChain)
 
     m_pDevice->CreateTexture2D(&safeDesc, NULL, &m_backBufferTexture);
 
-    m_pDevice->CreateShaderResourceView(m_backBufferTexture, NULL, &renderTargetShaderResourceView);
+    m_pDevice->CreateShaderResourceView(m_backBufferTexture, NULL, &mainShaderResourceView);
 
-    renderTargetTextures[0] = m_backBufferTexture;
+    downSampleTextures[THUMBNAIL_MAX_QUALITY] = m_backBufferTexture;
 
     //m_pDevice->CreateRenderTargetView(backBufferTexture, &rtvDesc, &renderTargetView);
 
@@ -756,15 +756,15 @@ void Renderer::Initialise(ID3D11Device *pDevice, IDXGISwapChain *pSwapChain)
     desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     desc.CPUAccessFlags = 0;
     desc.MiscFlags = 0;
-    for (UINT i = 0; i < MAX_MIP_LEVELS - 1; ++i)
+    for (UINT i = 0; i < NUM_THUMBNAIL_DOWNSAMPLES; ++i)
     {
         desc.Width = s_auiWidths[i + 1];
         desc.Height = s_auiHeights[i + 1];
 
         // @Patoke fix: before these would fail and our views would be nullptrs
-        m_pDevice->CreateTexture2D(&desc, NULL, &renderTargetTextures[i]);
-        m_pDevice->CreateRenderTargetView(renderTargetTextures[i], NULL, &renderTargetViews[i]);
-        m_pDevice->CreateShaderResourceView(renderTargetTextures[i], NULL, &renderTargetShaderResourceViews[i]);
+        m_pDevice->CreateTexture2D(&desc, NULL, &downSampleTextures[i]);
+        m_pDevice->CreateRenderTargetView(downSampleTextures[i], NULL, &downSampleRenderTargetViews[i]);
+        m_pDevice->CreateShaderResourceView(downSampleTextures[i], NULL, &downSampleShaderResourceViews[i]);
     }
 
     std::memset(m_textures, 0, sizeof(m_textures));
@@ -878,7 +878,7 @@ void Renderer::Present()
         ID3D11Texture2D *backBuffer = NULL;
         ID3D11Texture2D *stagingTexture = NULL;
 
-        renderTargetView->GetResource(&backBufferResource);
+        mainRenderTargetView->GetResource(&backBufferResource);
         backBufferResource->QueryInterface(IID_PPV_ARGS(&backBuffer));
         D3D11_TEXTURE2D_DESC desc = {};
         backBuffer->GetDesc(&desc);
@@ -911,9 +911,19 @@ void Renderer::Present()
             m_pDeviceContext->Unmap(stagingTexture, 0);
         }
 
-        static int count = 0;
+        // @Patoke add
+        char curDir[256];
+        GetCurrentDirectoryA(sizeof(curDir), curDir);
+
+        char ssPath[512];
+        sprintf(ssPath, "%s/Windows64/GameHDD/", curDir);
+
+        _SYSTEMTIME UTCSysTime;
+        GetSystemTime(&UTCSysTime);
+
         char fileName[304];
-        sprintf(fileName, "d:\\screen%d.png", count++);
+        sprintf(fileName, "%s/%4d-%02d-%02d-%02d-%02d-%02d.png", ssPath, UTCSysTime.wYear, UTCSysTime.wMonth, UTCSysTime.wDay, UTCSysTime.wHour, UTCSysTime.wMinute,
+                UTCSysTime.wSecond);
 
         D3DXIMAGE_INFO info;
         info.Width = kScreenGrabWidth;
@@ -1015,7 +1025,7 @@ void Renderer::StartFrame()
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
     c.m_pDeviceContext->RSSetViewports(1, &viewport);
-    c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
+    c.m_pDeviceContext->OMSetRenderTargets(1, &mainRenderTargetView, depthStencilView);
 
     PROFILER_FLIP();
 }

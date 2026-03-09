@@ -35,10 +35,16 @@ SOFTWARE.
 #define MATRIX_MODE_MODELVIEW_CBUFF      3
 #define MATRIX_MODE_MODELVIEW_MAX        4
 
-#define STACK_TYPES    4
-#define STACK_SIZE     16
-#define MAX_MIP_LEVELS 5
+#define STACK_TYPES  4
+#define STACK_SIZE   16
 #define MAX_TEXTURES 512
+
+#define NUM_THUMBNAIL_DOWNSAMPLES      4 // the amount of downsamples we do to the thumbnail texture
+#define THUMBNAIL_MAX_QUALITY          0 // 1920x1080
+#define THUMBNAIL_DOWNSAMPLE_QUALITY_1 1 // 512x512
+#define THUMBNAIL_DOWNSAMPLE_QUALITY_2 2 // 256x256
+#define THUMBNAIL_DOWNSAMPLE_QUALITY_3 3 // 128x128
+#define THUMBNAIL_DOWNSAMPLE_TARGET    4 // 64x64
 
 #define NUM_COMMAND_HANDLES 0x800000
 #define MAX_COMMAND_BUFFERS 16000
@@ -164,6 +170,15 @@ private:
     void DeleteInternalBuffer(int index);
     Renderer::Context &getContext();
 public:
+
+    enum eTextureSamplerFlags
+    {
+        SAMPLER_PARAM_CLAMP_U = 1 << 0,
+        SAMPLER_PARAM_CLAMP_V = 1 << 1,
+        SAMPLER_PARAM_LINEAR_FILTER = 1 << 2,
+        SAMPLER_PARAM_LINEAR_MIPS = 1 << 3,
+    };
+
     struct Texture
     {
         bool allocated;
@@ -422,11 +437,11 @@ public:
     ID3D11Device *m_pDevice;
     ID3D11DeviceContext *m_pDeviceContext;
     IDXGISwapChain *m_pSwapChain;
-    ID3D11RenderTargetView *renderTargetView;
-    ID3D11RenderTargetView *renderTargetViews[4];
-    ID3D11ShaderResourceView *renderTargetShaderResourceView;
-    ID3D11ShaderResourceView *renderTargetShaderResourceViews[4];
-    ID3D11Texture2D *renderTargetTextures[4];
+    ID3D11RenderTargetView *mainRenderTargetView;
+    ID3D11RenderTargetView *downSampleRenderTargetViews[NUM_THUMBNAIL_DOWNSAMPLES];
+    ID3D11ShaderResourceView *mainShaderResourceView;
+    ID3D11ShaderResourceView *downSampleShaderResourceViews[NUM_THUMBNAIL_DOWNSAMPLES];
+    ID3D11Texture2D *downSampleTextures[NUM_THUMBNAIL_DOWNSAMPLES];
     ID3D11DepthStencilView *depthStencilView;
     ID3D11VertexShader **vertexShaderTable;
     ID3D11VertexShader *screenSpaceVertexShader;
@@ -456,14 +471,14 @@ public:
     BYTE reservedRendererByte1;
     BYTE paddingAfterRendererByte1[3];
     DWORD reservedRendererDword1;
-    int16_t *m_commandHandleToIndex;
+    int16_t *m_vertexIdxToBufferIdx;
     CommandBuffer **m_commandBuffers;
     DirectX::XMMATRIX *m_commandMatrices;
-    int *m_commandIndexToHandle;
+    int *m_bufferIdxToVertexIdx;
     uint8_t *m_commandPrimitiveTypes;
     uint8_t *m_commandVertexTypes;
-    DWORD reservedRendererDword2;
-    DWORD reservedRendererDword3;
+    DWORD m_currentCommandBuffer;
+    DWORD m_numBuffersToDeallocate;
     std::unordered_map<int, ID3D11BlendState *> managedBlendStates;
     std::unordered_map<int, ID3D11DepthStencilState *> managedDepthStencilStates;
     std::unordered_map<int, ID3D11SamplerState *> managedSamplerStates;

@@ -114,7 +114,7 @@ bool Renderer::CBuffCall(int index, bool full)
     EnterCriticalSection(&m_commandBufferCS);
 
     bool result = false;
-    const int commandIndex = m_commandHandleToIndex[index];
+    const int commandIndex = m_vertexIdxToBufferIdx[index];
     if (commandIndex >= 0)
     {
         Renderer::Context &c = getContext();
@@ -210,12 +210,11 @@ void Renderer::CBuffClear(int index)
 {
     EnterCriticalSection(&m_commandBufferCS);
 
-    std::int16_t *externalToInternal = static_cast<std::int16_t*>(m_commandHandleToIndex);
-    const int internalIndex = externalToInternal[index];
+    const int internalIndex = m_vertexIdxToBufferIdx[index];
     if (internalIndex >= 0)
     {
         DeleteInternalBuffer(internalIndex);
-        externalToInternal[index] = static_cast<std::int16_t>(-2);
+        m_vertexIdxToBufferIdx[index] = static_cast<std::int16_t>(-2);
     }
 
     LeaveCriticalSection(&m_commandBufferCS);
@@ -235,7 +234,7 @@ int Renderer::CBuffCreate(int count)
             assert(first < NUM_COMMAND_HANDLES);
 
             int cursor = probe;
-            while (cursor < end && cursor < NUM_COMMAND_HANDLES && m_commandHandleToIndex[cursor] == static_cast<std::int16_t>(-1))
+            while (cursor < end && cursor < NUM_COMMAND_HANDLES && m_vertexIdxToBufferIdx[cursor] == static_cast<std::int16_t>(-1))
             {
                 ++cursor;
             }
@@ -257,7 +256,7 @@ int Renderer::CBuffCreate(int count)
         {
             const int allocationEnd = first + count;
             for (int i = first; i < allocationEnd; ++i)
-                m_commandHandleToIndex[i] = static_cast<std::int16_t>(-2);
+                m_vertexIdxToBufferIdx[i] = static_cast<std::int16_t>(-2);
 
             if (reservedRendererByte1)
                 reservedRendererDword1 = allocationEnd;
@@ -284,18 +283,18 @@ void Renderer::CBuffDeferredModeEnd()
     for (std::vector<Renderer::DeferredCBuff>::const_iterator it = c.deferredBuffers.begin(); it != c.deferredBuffers.end(); ++it)
     {
         const Renderer::DeferredCBuff &deferred = *it;
-        const int existingIndex = m_commandHandleToIndex[deferred.m_vertex_index];
+        const int existingIndex = m_vertexIdxToBufferIdx[deferred.m_vertex_index];
         if (existingIndex >= 0)
             DeleteInternalBuffer(existingIndex);
 
-        if (static_cast<int>(reservedRendererDword2 + reservedRendererDword3 + 10) > MAX_COMMAND_BUFFERS)
+        if (static_cast<int>(m_currentCommandBuffer + m_numBuffersToDeallocate + 10) > MAX_COMMAND_BUFFERS)
             DebugBreak();
 
-        const int internalSlot = reservedRendererDword2;
-        ++reservedRendererDword2;
+        const int internalSlot = m_currentCommandBuffer;
+        ++m_currentCommandBuffer;
 
-        m_commandHandleToIndex[deferred.m_vertex_index] = static_cast<std::int16_t>(internalSlot);
-        m_commandIndexToHandle[internalSlot] = deferred.m_vertex_index;
+        m_vertexIdxToBufferIdx[deferred.m_vertex_index] = static_cast<std::int16_t>(internalSlot);
+        m_bufferIdxToVertexIdx[internalSlot] = deferred.m_vertex_index;
         m_commandVertexTypes[internalSlot] = static_cast<std::uint8_t>(deferred.m_vertex_type);
         m_commandPrimitiveTypes[internalSlot] = static_cast<std::uint8_t>(deferred.m_primitive_type);
         m_commandBuffers[internalSlot] = deferred.m_command_buf;
@@ -318,11 +317,11 @@ void Renderer::CBuffDelete(int first, int count)
     const int end = first + count;
     for (int i = first; i < end; ++i)
     {
-        const int internalIndex = m_commandHandleToIndex[i];
+        const int internalIndex = m_vertexIdxToBufferIdx[i];
         if (internalIndex >= 0)
             DeleteInternalBuffer(internalIndex);
 
-        m_commandHandleToIndex[i] = static_cast<std::int16_t>(-1);
+        m_vertexIdxToBufferIdx[i] = static_cast<std::int16_t>(-1);
     }
 
     LeaveCriticalSection(&m_commandBufferCS);
@@ -349,18 +348,18 @@ void Renderer::CBuffEnd()
     }
     else
     {
-        const int existingIndex = m_commandHandleToIndex[c.recordingBufferIndex];
+        const int existingIndex = m_vertexIdxToBufferIdx[c.recordingBufferIndex];
         if (existingIndex >= 0)
             DeleteInternalBuffer(existingIndex);
 
-        if (static_cast<int>(reservedRendererDword2 + reservedRendererDword3 + 10) > MAX_COMMAND_BUFFERS)
+        if (static_cast<int>(m_currentCommandBuffer + m_numBuffersToDeallocate + 10) > MAX_COMMAND_BUFFERS)
             DebugBreak();
 
-        const int internalSlot = reservedRendererDword2;
-        ++reservedRendererDword2;
+        const int internalSlot = m_currentCommandBuffer;
+        ++m_currentCommandBuffer;
 
-        m_commandHandleToIndex[c.recordingBufferIndex] = static_cast<std::int16_t>(internalSlot);
-        m_commandIndexToHandle[internalSlot] = c.recordingBufferIndex;
+        m_vertexIdxToBufferIdx[c.recordingBufferIndex] = static_cast<std::int16_t>(internalSlot);
+        m_bufferIdxToVertexIdx[internalSlot] = c.recordingBufferIndex;
         m_commandVertexTypes[internalSlot] = static_cast<std::uint8_t>(c.recordingVertexType);
         m_commandPrimitiveTypes[internalSlot] = static_cast<std::uint8_t>(c.recordingPrimitiveType);
         m_commandBuffers[internalSlot] = c.commandBuffer;
@@ -386,7 +385,7 @@ int Renderer::CBuffSize(int index)
 
     unsigned int size = 0;
     EnterCriticalSection(&m_commandBufferCS);
-    const int commandIndex = m_commandHandleToIndex[index];
+    const int commandIndex = m_vertexIdxToBufferIdx[index];
     if (commandIndex >= 0)
         size = static_cast<unsigned int>(m_commandBuffers[commandIndex]->GetAllocated());
     LeaveCriticalSection(&m_commandBufferCS);
@@ -412,26 +411,26 @@ void Renderer::CBuffTick()
     EnterCriticalSection(&m_commandBufferCS);
 
     int completedDeletes = 0;
-    if (reservedRendererDword3 > 0)
+    if (m_numBuffersToDeallocate > 0)
     {
-        int tailSlot = MAX_COMMAND_BUFFERS - 1;
+        int deleteIdx = MAX_COMMAND_BUFFERS - 1;
         do
         {
-            Renderer::CommandBuffer *buffer = m_commandBuffers[tailSlot];
+            Renderer::CommandBuffer *buffer = m_commandBuffers[deleteIdx];
             if (buffer)
                 delete buffer;
-            m_commandBuffers[tailSlot] = NULL;
+            m_commandBuffers[deleteIdx] = NULL;
 
-            if (--reservedRendererDword3 == 0)
+            if (--m_numBuffersToDeallocate == 0)
             {
                 ++completedDeletes;
-                --tailSlot;
+                --deleteIdx;
             }
             else
             {
-                m_commandBuffers[tailSlot] = m_commandBuffers[(MAX_COMMAND_BUFFERS - 1) - static_cast<int>(reservedRendererDword3)];
+                m_commandBuffers[deleteIdx] = m_commandBuffers[(MAX_COMMAND_BUFFERS - 1) - static_cast<int>(m_numBuffersToDeallocate)];
             }
-        } while (completedDeletes < static_cast<int>(reservedRendererDword3));
+        } while (completedDeletes < static_cast<int>(m_numBuffersToDeallocate));
     }
 
     LeaveCriticalSection(&m_commandBufferCS);
@@ -441,24 +440,24 @@ void Renderer::DeleteInternalBuffer(int index)
 {
     EnterCriticalSection(&m_commandBufferCS);
 
-    ++reservedRendererDword3;
-    const int recycledSlot = MAX_COMMAND_BUFFERS - static_cast<int>(reservedRendererDword3);
+    ++m_numBuffersToDeallocate;
+    const int index_delete = MAX_COMMAND_BUFFERS - static_cast<int>(m_numBuffersToDeallocate);
 
-    m_commandBuffers[recycledSlot] = m_commandBuffers[index];
-    m_commandMatrices[recycledSlot] = m_commandMatrices[index];
+    m_commandBuffers[index_delete] = m_commandBuffers[index];
+    m_commandMatrices[index_delete] = m_commandMatrices[index];
 
-    if (reservedRendererDword2-- != 1)
+    if (m_currentCommandBuffer-- != 1)
     {
-        const int lastActive = reservedRendererDword2;
+        const int mappedFrom = m_currentCommandBuffer;
 
-        m_commandBuffers[index] = m_commandBuffers[lastActive];
-        m_commandMatrices[index] = m_commandMatrices[lastActive];
-        m_commandVertexTypes[index] = m_commandVertexTypes[lastActive];
-        m_commandPrimitiveTypes[index] = m_commandPrimitiveTypes[lastActive];
+        m_commandBuffers[index] = m_commandBuffers[mappedFrom];
+        m_commandMatrices[index] = m_commandMatrices[mappedFrom];
+        m_commandVertexTypes[index] = m_commandVertexTypes[mappedFrom];
+        m_commandPrimitiveTypes[index] = m_commandPrimitiveTypes[mappedFrom];
 
-        const int commandIndex = m_commandIndexToHandle[lastActive];
-        m_commandHandleToIndex[commandIndex] = static_cast<std::int16_t>(index);
-        m_commandIndexToHandle[index] = commandIndex;
+        const int commandIndex = m_bufferIdxToVertexIdx[mappedFrom];
+        m_vertexIdxToBufferIdx[commandIndex] = static_cast<std::int16_t>(index);
+        m_bufferIdxToVertexIdx[index] = commandIndex;
     }
 
     LeaveCriticalSection(&m_commandBufferCS);

@@ -98,14 +98,15 @@ ID3D11SamplerState *Renderer::GetManagedSamplerState()
     if (it != managedSamplerStates.end())
         return it->second;
 
-    const bool clampU = (key & 0x01) != 0;
-    const bool clampV = (key & 0x02) != 0;
-    const bool linearFilter = (key & 0x04) != 0;
-    const bool mipLinear = (key & 0x08) != 0;
-    const int filterBits = (mipLinear ? 0x08 : 0x00) | (linearFilter ? 0x22 : 0x02);
+    const bool clampU = (key & SAMPLER_PARAM_CLAMP_U) != 0;
+    const bool clampV = (key & SAMPLER_PARAM_CLAMP_V) != 0;
+    const bool linearFilter = (key & SAMPLER_PARAM_LINEAR_FILTER) != 0;
+    const bool mipLinear = (key & SAMPLER_PARAM_LINEAR_MIPS) != 0;
+    const int filterBits = (mipLinear != 0 ? (linearFilter ? D3D11_FILTER_MIN_MAG_MIP_LINEAR : D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR)
+                                           : (linearFilter ? D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR : D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR));
 
     D3D11_SAMPLER_DESC desc = {};
-    desc.Filter = static_cast<D3D11_FILTER>(filterBits >> 1);
+    desc.Filter = static_cast<D3D11_FILTER>(filterBits);
     desc.AddressU = clampU ? D3D11_TEXTURE_ADDRESS_CLAMP : D3D11_TEXTURE_ADDRESS_WRAP;
     desc.AddressV = clampV ? D3D11_TEXTURE_ADDRESS_CLAMP : D3D11_TEXTURE_ADDRESS_WRAP;
     desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -577,7 +578,7 @@ void Renderer::StateSetViewport(C4JRender::eViewportType viewportType)
     viewport.MaxDepth = 1.0f;
 
     m_pDeviceContext->RSSetViewports(1, &viewport);
-    m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
+    m_pDeviceContext->OMSetRenderTargets(1, &mainRenderTargetView, depthStencilView);
 }
 
 

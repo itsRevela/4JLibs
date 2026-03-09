@@ -146,8 +146,21 @@ C4JStorage::ESaveGameState CSaveGame::GetSavesInfo(int iPad, int (*Func)(LPVOID 
                             // too but this is good enough for now
                             if (!(saveFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
                             {
-                                strcpy_s(szTitleName, sizeof(szTitleName), saveFileData.cFileName);
-                                strcpy_s(this->m_szSaveTitle, saveFileData.cFileName); // populate the save title
+                                // remove the file extension
+                                std::string decoratedSaveTitle = saveFileData.cFileName;
+                                uint64_t extensionDot = decoratedSaveTitle.rfind('.');
+
+                                // populate the save title
+                                if (extensionDot != std::string::npos)
+                                {
+                                    strcpy_s(this->m_szSaveTitle, decoratedSaveTitle.substr(0, extensionDot).c_str());
+                                }
+                                else
+                                {
+                                    strcpy_s(this->m_szSaveTitle, decoratedSaveTitle.c_str());
+                                }
+
+                                strcpy_s(szTitleName, sizeof(szTitleName), this->m_szSaveTitle);
                                 break;
                             }
                         } while (FindNextFileA(hSaveFile, &saveFileData));
@@ -159,7 +172,7 @@ C4JStorage::ESaveGameState CSaveGame::GetSavesInfo(int iPad, int (*Func)(LPVOID 
                     strcpy_s(m_pSaveDetails->SaveInfoA[i].UTF8SaveTitle, szTitleName);
 
                     char fileName[280];
-                    sprintf(fileName, "%s\\Windows64\\GameHDD\\%s\\%s", dirName, findFileData.cFileName, szTitleName);
+                    sprintf(fileName, "%s\\Windows64\\GameHDD\\%s\\%s.ms", dirName, findFileData.cFileName, szTitleName);
 
                     GetFileAttributesExA(fileName, GetFileExInfoStandard, &fileInfoBuffer);
                     m_pSaveDetails->SaveInfoA[i].metaData.dataSize = fileInfoBuffer.nFileSizeLow;
@@ -275,7 +288,7 @@ C4JStorage::ESaveGameState CSaveGame::LoadSaveData(PSAVE_INFO pSaveInfo, int (*F
     GetCurrentDirectoryA(sizeof(curDir), curDir);
     sprintf(dirName, "%s/Windows64/GameHDD/%s", curDir, m_szSaveUniqueName);
     CreateDirectoryA(dirName, 0);
-    sprintf(fileName, "%s/%s", dirName, this->m_szSaveTitle); // @Patoke add
+    sprintf(fileName, "%s/%s.ms", dirName, this->m_szSaveTitle); // @Patoke add
 
     HANDLE h = CreateFileA(fileName, GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
@@ -490,7 +503,7 @@ C4JStorage::ESaveGameState CSaveGame::SaveSaveData(int (*Func)(LPVOID, const boo
     GetCurrentDirectoryA(sizeof(curDir), curDir);
     sprintf(dirName, "%s/Windows64/GameHDD/%s", curDir, m_szSaveUniqueName);
     CreateDirectoryA(dirName, 0);
-    sprintf(fileName, "%s/%s", dirName, this->m_szSaveTitle); // @Patoke add
+    sprintf(fileName, "%s/%s.ms", dirName, this->m_szSaveTitle); // @Patoke add
 
     HANDLE h = CreateFileA(fileName, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 
@@ -534,7 +547,7 @@ C4JStorage::ESaveGameState CSaveGame::DeleteSaveData(PSAVE_INFO pSaveInfo, int (
     GetCurrentDirectoryA(sizeof(curDir), curDir);
 
     sprintf(dirName, "%s/Windows64/GameHDD/%s", curDir, pSaveInfo->UTF8SaveFilename);
-    sprintf(fileName, "%s/%s", dirName, pSaveInfo->UTF8SaveTitle);
+    sprintf(fileName, "%s/%s.ms", dirName, pSaveInfo->UTF8SaveTitle);
     sprintf(thumbName, "%s/thumbnails/thumbData.png", dirName);
 
     DeleteFileA(fileName);
