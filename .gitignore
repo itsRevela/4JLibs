@@ -435,6 +435,9 @@ FodyWeavers.xsd
 
 extraX64.h
 
+.vscode/
+build/
+
 # generated shader headers
 VS_PF3_TF2_CB4_NB4_XW1.h
 VS_Compressed.h
