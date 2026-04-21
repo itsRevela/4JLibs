@@ -248,7 +248,7 @@ int C4JStorage::GetOfferCount()
     return 0;
 }
 
-DWORD C4JStorage::InstallOffer(int iOfferIDC, __uint64 *ullOfferIDA, int (*Func)(LPVOID, int, int), LPVOID lpParam, bool bTrial)
+DWORD C4JStorage::InstallOffer(int iOfferIDC, unsigned __int64 *ullOfferIDA, int (*Func)(LPVOID, int, int), LPVOID lpParam, bool bTrial)
 {
     return 0;
 }
