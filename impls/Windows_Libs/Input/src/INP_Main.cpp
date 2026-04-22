@@ -146,11 +146,11 @@ void CInput::SetJoypadValues(JOYPAD *pThisPad)
 
     if ((pGamePad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB) != 0)
     {
-        pThisPad->m_uiButtons |= _360_JOY_BUTTON_RTHUMB;
+        pThisPad->m_uiButtons |= _360_JOY_BUTTON_LTHUMB;
     }
     if ((pGamePad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB) != 0)
     {
-        pThisPad->m_uiButtons |= _360_JOY_BUTTON_LTHUMB;
+        pThisPad->m_uiButtons |= _360_JOY_BUTTON_RTHUMB;
     }
 
     if ((pGamePad->wButtons & XINPUT_GAMEPAD_DPAD_UP) != 0)
